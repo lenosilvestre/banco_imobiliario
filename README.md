@@ -1,0 +1,3 @@
+# banco_imobiliario
+Jogo banco imobiliário feito em casa com recortes de papelão e um dispositivo Arduino UNO como maquina de cartão para efetuar as transações financeiras. 
+Neste exemplo, a leitura do cartão RFID é acionada pela tecla A do teclado matricial. Quando a tecla A é pressionada, o programa exibe uma mensagem no display LCD solicitando que o usuário aproxime o cartão RFID. Em seguida, o programa aguarda até que um cartão seja detectado pelo módulo RFID e lê o UID do cartão. O UID é então exibido no display LCD por alguns segundos antes que o display seja limpo novamente. Se outra tecla além da tecla A for pressionada, o caractere correspondente é exibido no display LCD.
