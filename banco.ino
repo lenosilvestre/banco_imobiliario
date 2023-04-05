@@ -57,7 +57,7 @@ void loop() {
       mfrc522.PICC_ReadCardSerial();
       String cardUID = "";
       for (byte i = 0; i < mfrc522.uid.size; i++) {
-        if (mfrc522.uid.uidByte[i] < 0x10) {
+               if (mfrc522.uid.uidByte[i] < 0x10) {
           cardUID += "0";
         }
         cardUID += String(mfrc522.uid.uidByte[i], HEX);
