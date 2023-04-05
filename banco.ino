@@ -57,20 +57,22 @@ void loop() {
       mfrc522.PICC_ReadCardSerial();
       String cardUID = "";
       for (byte i = 0; i < mfrc522.uid.size; i++) {
-          cardUID.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? "0" : ""));
-    cardUID.concat(String(mfrc522.uid.uidByte[i], HEX));
+        if (mfrc522.uid.uidByte[i] < 0x10) {
+          cardUID += "0";
+        }
+        cardUID += String(mfrc522.uid.uidByte[i], HEX);
+      }
+      
+      lcd.clear();  // Limpa o display LCD
+      lcd.print("Cartao lido:");
+      lcd.setCursor(0, 1);
+      lcd.print(cardUID);
+      
+      // Aguarda 2 segundos antes de limpar o display LCD
+      delay(2000);
+      lcd.clear();
+    } else {  // Se qualquer outra tecla for pressionada, exibe o número no display LCD
+      lcd.print(key);
+    }
   }
-  
-  // Exibe o UID do cartão no display LCD
-  lcd.clear();
-  lcd.print("Cartao:");
-  lcd.setCursor(0, 1);
-  lcd.print(cardUID);
-  
-  // Aguarda 3 segundos antes de limpar o display LCD
-  delay(3000);
-  lcd.clear();
-}
-else {  // Se outra tecla foi pressionada, exibe a tecla no display LCD
-  lcd.print(key);
 }
