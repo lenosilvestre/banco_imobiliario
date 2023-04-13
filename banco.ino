@@ -1,78 +1,65 @@
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>  // Inclui a biblioteca para o display LCD
-#include <Keypad.h>  // Inclui a biblioteca para o teclado matricial
-#include <SPI.h>
-#include <MFRC522.h>  // Inclui a biblioteca para o módulo RFID
+#include <Keypad.h>
 
-// Define os pinos utilizados para o display LCD
-#define LCD_ADDRESS 0x27  // Endereço I2C do display LCD
-#define LCD_COLUMNS 16    // Número de colunas do display LCD
-#define LCD_ROWS 2        // Número de linhas do display LCD
-LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
+#include <LiquidCrystal.h>
 
-// Define os pinos utilizados para o teclado matricial
-const byte ROWS = 4;  // Número de linhas no teclado matricial
-const byte COLS = 4;  // Número de colunas no teclado matricial
-char keys[ROWS][COLS] = {
-  {'1', '2', '3', 'A'},
-  {'4', '5', '6', 'B'},
-  {'7', '8', '9', 'C'},
-  {'*', '0', '#', 'D'}
-};
-byte rowPins[ROWS] = {9, 8, 7, 6};  // Pinos das linhas do teclado matricial
-byte colPins[COLS] = {5, 4, 3, 2};  // Pinos das colunas do teclado matricial
-Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+// Definição dos pinos utilizados para o teclado matricial
+const byte linhas = 4;
+const byte colunas = 4;
+byte linhaPinos[] = {8, 9, 10, 11};
+byte colunaPinos[] = {A0, A1, A2, A3};
 
-// Define os pinos utilizados para o módulo RFID
-#define SS_PIN 10  // Pino Slave Select
-#define RST_PIN 9  // Pino de reset
-MFRC522 mfrc522(SS_PIN, RST_PIN);  // Cria um objeto MFRC522
+// Matriz de caracteres que representa as teclas do teclado matricial
+   char teclas[linhas][colunas] = {
+    {'1', '2', '3', 'A'},
+    {'4', '5', '6', 'B'},
+    {'7', '8', '9', 'C'},
+    {'*', '0', '#', 'D'}
+  };
+// Criação do objeto Keypad
+Keypad keypad = Keypad(makeKeymap(teclas), linhaPinos, colunaPinos, linhas, colunas);
+
+// Definição dos pinos utilizados para o display LCD
+const byte rs = 7;
+const byte enable = 6;
+const byte d4 = 5;
+const byte d5 = 4;
+const byte d6 = 3;
+const byte d7 = 2;
+
+// Criação do objeto LiquidCrystal
+LiquidCrystal lcd(rs, enable, d4, d5, d6, d7);
+
+String valor = "";
 
 void setup() {
-  Serial.begin(9600);   // Inicializa a comunicação serial
-  lcd.init();           // Inicializa o display LCD
-  lcd.backlight();      // Liga a luz de fundo do display LCD
-  lcd.clear();          // Limpa o display LCD
-  SPI.begin();          // Inicializa a interface SPI
-  mfrc522.PCD_Init();   // Inicializa o módulo RFID
+
+
+  // Inicializa o display LCD com 16 colunas e 2 linhas
+  lcd.begin(16, 2);
+
+  // Imprime a mensagem inicial no display LCD
+  lcd.print("Digite o valor:");
+  Serial.begin(9600);
 }
 
 void loop() {
-  // Lê o teclado matricial para detectar qual tecla foi pressionada
-  char key = keypad.getKey();
+ 
+ char tecla = keypad.getKey();
   
-  if (key) {  // Se uma tecla foi pressionada
-    if (key == 'A') {  // Se a tecla A foi pressionada, inicia a leitura do cartão RFID
-      lcd.clear();  // Limpa o display LCD
-      lcd.print("Aproxime o");
-      lcd.setCursor(0, 1);
-      lcd.print("cartao RFID...");
-      
-      // Aguarda até que um cartão seja detectado
-      while (!mfrc522.PICC_IsNewCardPresent()) {
-        delay(10);
-      }
-      
-      // Lê o UID do cartão
-      mfrc522.PICC_ReadCardSerial();
-      String cardUID = "";
-      for (byte i = 0; i < mfrc522.uid.size; i++) {
-               if (mfrc522.uid.uidByte[i] < 0x10) {
-          cardUID += "0";
-        }
-        cardUID += String(mfrc522.uid.uidByte[i], HEX);
-      }
-      
-      lcd.clear();  // Limpa o display LCD
-      lcd.print("Cartao lido:");
-      lcd.setCursor(0, 1);
-      lcd.print(cardUID);
-      
-      // Aguarda 2 segundos antes de limpar o display LCD
-      delay(2000);
-      lcd.clear();
-    } else {  // Se qualquer outra tecla for pressionada, exibe o número no display LCD
-      lcd.print(key);
-    }
+  if(tecla != NO_KEY){
+    if(tecla == 'A'){
+      	lcd.setCursor(valor.length()-1, 1);
+        lcd.print(" ");
+     	valor = valor.substring(0,valor.length()-1); 
+    }else{
+    	valor += tecla;
+	}
   }
+  
+  exibeLcd();
+}
+void exibeLcd(){
+  		lcd.setCursor(0, 1);
+        lcd.print(valor);
+  		Serial.println(valor);
 }
