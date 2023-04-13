@@ -1,1 +1,27 @@
-nada
+Para conectar o teclado matricial 4x4 ao Arduino, siga o seguinte esquema de ligação:
+
+Pino do teclado	Ligação ao Arduino
+1 (linha 1)	Pino digital do Arduino (ex: D8)
+2 (linha 2)	Pino digital do Arduino (ex: D9)
+3 (linha 3)	Pino digital do Arduino (ex: D10)
+4 (linha 4)	Pino digital do Arduino (ex: D11)
+5 (coluna 1)	Pino analógico do Arduino (ex: A0) configurado como entrada
+6 (coluna 2)	Pino analógico do Arduino (ex: A1) configurado como entrada
+7 (coluna 3)	Pino analógico do Arduino (ex: A2) configurado como entrada
+8 (coluna 4)	Pino analógico do Arduino (ex: A3) configurado como entrada
+
+Pino do LCD	Ligação ao Arduino
+1 (VSS)	GND
+2 (VDD)	5V
+3 (VO)	Potenciômetro para ajuste do contraste
+4 (RS)	Pino digital do Arduino (ex: D7)
+5 (R/W)	GND
+6 (E)	Pino digital do Arduino (ex: D6)
+7 a 10 (DB0 a DB3)	Não conecte
+11 (DB4)	Pino digital do Arduino (ex: D5)
+12 (DB5)	Pino digital do Arduino (ex: D4)
+13 (DB6)	Pino digital do Arduino (ex: D3)
+14 (DB7)	Pino digital do Arduino (ex: D2)
+15 (LED+)	5V (para backlight ligado) ou Não conecte (para backlight desligado)
+16 (LED-)	GND
+
