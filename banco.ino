@@ -21,8 +21,8 @@ byte colunaPinos[] = {A0, A1, A2, A3};
 
 // Matriz de caracteres que representa as teclas do teclado matricial
 char teclas[linhas][colunas] = {
-  {'1', '2', '3', 'A'},
-  {'4', '5', '6', 'B'},
+  {'1', '2', '3', '+'},
+  {'4', '5', '6', '-'},
   {'7', '8', '9', 'C'},
   {'*', '0', '#', 'D'}
 };
@@ -50,6 +50,7 @@ Thread menuTextoLcd;
 Thread qtdDeJogadoresMenu;
 Thread txtEsperandoCartao;
 Thread leituraDoControle; //depois mudar para RFID
+Thread iniciaCalculadora;
 
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
 String valor = "";
@@ -110,6 +111,10 @@ void setup() {
   leituraDoControle.onRun(controleRemoto);
   leituraDoControle.enabled = false;
 
+  iniciaCalculadora.setInterval(0);
+  iniciaCalculadora.onRun(calculadora);
+  iniciaCalculadora.enabled = false;
+
 
 
   cpu.add(&menuTextoLcd);
@@ -117,6 +122,7 @@ void setup() {
   cpu.add(&txtEsperandoCartao);
   cpu.add(&leituraDoControle);
   cpu.add(&leituraDoTeclado);
+  cpu.add(&iniciaCalculadora);
 }
 
 
@@ -203,6 +209,8 @@ void esperandoCartao() {
 
     printListaJogadores();
 
+    iniciaCalculadora.enabled = true;
+
   } else {
     exibeLcd(0, 0, "Aproxime o ");
     // exibeLcd(0, 1, "cartao");
@@ -253,7 +261,7 @@ void lendoEPRROM() {
 boolean jogadorAdicionado() {
   int cont = 0;
   for (int i = 0 ; i < qtdDeJogadores ; i++) {
-    if (listaDeJogadores[i].equals(valor)) {
+    if (players[i].codCartao.equals(valor)) {
       valor = "";
       cont++;
     }
@@ -276,6 +284,58 @@ void printListaJogadores() {
 
   }
 }
+
+//CALCULADORA
+int value1 = 0;
+int value2 = 0;
+char operation;
+
+void calculadora(){
+
+  char key = keypad.getKey();
+
+  if (key != NO_KEY) {
+    if (key >= '0' && key <= '9') {
+      // Adiciona o dígito ao valor atual
+      if (operation == 0) {
+        value1 = value1 * 10 + (key - '0');
+        lcd.setCursor(0, 0);
+        lcd.print(value1);
+      } else {
+        value2 = value2 * 10 + (key - '0');
+        lcd.setCursor(0, 1);
+        lcd.print(value2);
+      }
+    } else if (key == '+' || key == '-') {
+      // Define a operação
+      operation = key;
+      lcd.setCursor(0, 1);
+      lcd.print(key);
+    } else if (key == '#') {
+      // Realiza o cálculo e exibe o resultado
+      int result;
+      if (operation == '+') {
+        result = value1 + value2;
+      } else if (operation == '-') {
+        result = value1 - value2;
+      }
+      lcd.setCursor(0, 1);
+      lcd.print("= ");
+      lcd.print(result);
+      delay(2000);
+      lcd.clear();
+      value1 = 0;
+      value2 = 0;
+      operation = 0;
+    }
+  }
+}
+
+
+
+
+
+
 
 
 //LEITURA DO TECLADO
