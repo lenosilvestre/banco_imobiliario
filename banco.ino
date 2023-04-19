@@ -3,6 +3,8 @@
 #include <IRremote.h>
 #include <Thread.h>
 #include <ThreadController.h>.
+#include <EEPROM.h>
+#include <string.h>
 
 
 //CONTROLE IR
@@ -54,17 +56,30 @@ String valor = "";
 
 String menu = "";
 String teclaPress = "";
-int contaJogador1 = 0;
-int contaJogador2 = 0;
-int contaJogador3 = 0;
-int contaJogador4 = 0;
-int valorPadrao = 15000;
+
+float dinheiroInicial = 15000;
+
 int qtdDeJogadores = 0;
+
+const int qtdMaximaDeJogadores = 6; //define o maximo de jogadores
+
+int EEPROM_endereco = 0;
 
 String listaDeJogadores [5];
 
+struct contaJogadores {
+  String  codCartao;
+  int num;
+  float saldoConta;
+};
+
+
+struct contaJogadores players [qtdMaximaDeJogadores - 1];
+
 
 void setup() {
+
+
 
   // Inicializa o receptor IR
   receiver.enableIRIn();
@@ -110,6 +125,12 @@ void loop() {
   cpu.run();
 
 
+  //     players[0] = {"Leno", 1, 15000};
+  //   players[1] = {"joao", 2, 15000};
+  //   Serial.println(players[0].codCartao);
+  //   Serial.println(players[1].codCartao);
+  // delay(50000);
+
 }
 String textoDeMenu [] = {"Vamos jogar..."};
 
@@ -143,63 +164,43 @@ void qtdJogadores() {
   lcd.clear();
 
   exibeLcd(0, 0, "Qtd de jogadores");
-  exibeLcd(0, 1, "de 2 a 4?");
-  int contaJogador1 = valorPadrao;
+  exibeLcd(0, 1, "de 2 a " + String(qtdMaximaDeJogadores));
 
-  if (teclaPress.equals("1")) {
-    exibeLcd(0, 0, "Selecione de 2 a ");
-    exibeLcd(0, 1, "4 jogadores        ");
+
+  if (teclaPress.toInt() > 1 && teclaPress.toInt() <= qtdMaximaDeJogadores) {
+    Serial.println(teclaPress + " jogadores selecionados");
+
+    qtdDeJogadoresMenu.enabled = false;
+
+    qtdDeJogadores =  teclaPress.toInt();;
+
+    txtEsperandoCartao.enabled = true;
     teclaPress = "";
-    delay(2000);
-    // qtdDeJogadoresMenu.enabled = false;
     //GRAVA NO EPROM O VALOR PADRÃO NA CONTA
 
-  }  if (teclaPress.equals("2")) {
-    Serial.println("2 jogadores selecionados");
-    teclaPress = "";
-    qtdDeJogadoresMenu.enabled = false;
-    //GRAVA NO EPROM O VALOR PADRÃO NA CONTA
-    qtdDeJogadores = 2;
-    int contaJogador2 = valorPadrao;
-    txtEsperandoCartao.enabled = true;
-  }  if (teclaPress.equals("3")) {
-    Serial.println("3 jogadores selecionados");
-    teclaPress = "";
-    qtdDeJogadoresMenu.enabled = false;
-    //GRAVA NO EPROM O VALOR PADRÃO NA CONTA
-    qtdDeJogadores = 3;
-    int contaJogador3 = valorPadrao;
-    txtEsperandoCartao.enabled = true;
-  }  if (teclaPress.equals("4")) {
-    Serial.println("4 jogadores selecionados");
-    teclaPress = "";
-    qtdDeJogadoresMenu.enabled = false;
-    //GRAVA NO EPROM O VALOR PADRÃO NA CONTA
-    qtdDeJogadores = 4;
-    int contaJogador4 = valorPadrao;
-    txtEsperandoCartao.enabled = true;
-  } 
-  
+  }
   if (!teclaPress.equals("")) {
     exibeLcd(0, 0, "Selecione de 2 a ");
-    exibeLcd(0, 1, "4 jogadores        ");
+    exibeLcd(0, 1, String(qtdMaximaDeJogadores) + " jogadores        ");
     teclaPress = "";
     delay(1000);
   }
 
 
 }
-int aux = 0;
 
+int aux = 0;
 
 //MENU QUE ADICIONA O CARTAO PARA CADA JOGADOR A LISTA []
 void esperandoCartao() {
   lcd.clear();
 
-  if ( aux == qtdDeJogadores) {
+  if ( aux == qtdDeJogadores) { //Quantidade de cartões lida = a quantidade maxima de jogadores
     txtEsperandoCartao.enabled = false;
     qtdDeJogadoresMenu.enabled = false;
     leituraDoControle.enabled = false;
+    salvaNaEEPROM();
+
     printListaJogadores();
 
   } else {
@@ -211,11 +212,40 @@ void esperandoCartao() {
 
 
     if (!valor.equals("") && !jogadorAdicionado()) {
-      listaDeJogadores[aux] = valor;
+      players[aux].codCartao = valor; //codigo do cartão
+      players[aux].num = aux + 1;
+      players[aux].saldoConta = dinheiroInicial;
+
+      valor = "";
+
+      lcd.clear();
+      exibeLcd(0, 0, players[aux].codCartao + " " + String(players[aux].num));
+      exibeLcd(0, 1, "R$ " + String(players[aux].saldoConta));
       aux++;
       Serial.println("add lista de jogadores");
+      delay(1000);
     }
   }
+
+}
+//GRAVANDO NA EEPROM
+void salvaNaEEPROM() {
+  for (int i = 0; i < qtdDeJogadores ; i++) {
+    int endereco = EEPROM_endereco + i *sizeof(contaJogadores);
+    EEPROM.put(endereco, players[i]);
+  }
+
+}
+
+contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
+//LER EEPROM
+void lendoEPRROM() {
+
+  for (int i = 0; i < qtdDeJogadores ; i++) {
+    int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
+    EEPROM.get(endereco, lerEeprom[i]);
+  }
+
 
 }
 
@@ -232,13 +262,18 @@ boolean jogadorAdicionado() {
 }
 
 
-
-
 //IMPRIME LISTA DE JOGADORES
 void printListaJogadores() {
   Serial.println("LISTA DE JOGADORES");
+  lendoEPRROM();
   for (int i = 0; i < qtdDeJogadores; i++) {
-    Serial.println(" jogador -> " + String(i + 1) + " - " + listaDeJogadores[i]);
+    String codCartao = lerEeprom[i].codCartao;
+    String num  = String(lerEeprom[i].num);
+    String saldo = String(lerEeprom[i].saldoConta);
+
+     Serial.println(codCartao + " " + num + "-> saldo: R$ " + saldo);
+
+
   }
 }
 
@@ -279,7 +314,7 @@ void controleRemoto() {
   valor = "";
   // Checks received an IR signal
   if (receiver.decode()) {
-    // Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
+    Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
     valor = receiver.decodedIRData.command;
     receiver.resume();  // Receive the next value
   }
