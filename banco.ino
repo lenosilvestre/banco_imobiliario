@@ -21,10 +21,10 @@ byte colunaPinos[] = {A0, A1, A2, A3};
 
 // Matriz de caracteres que representa as teclas do teclado matricial
 char teclas[linhas][colunas] = {
-  {'1', '2', '3', '+'},
-  {'4', '5', '6', '-'},
-  {'7', '8', '9', 'C'},
-  {'*', '0', '#', 'D'}
+  {'1', '2', '3', '+'}, //acrescentar
+  {'4', '5', '6', '-'}, //Subtrair
+  {'7', '8', '9', 'T'}, //Transferir
+  {'*', '0', '#', 'D'}  //Desfazer
 };
 // Criação do objeto Keypad
 Keypad keypad = Keypad(makeKeymap(teclas), linhaPinos, colunaPinos, linhas, colunas);
@@ -66,16 +66,19 @@ const int qtdMaximaDeJogadores = 6; //define o maximo de jogadores
 
 int EEPROM_endereco = 0;
 
-String listaDeJogadores [5];
 
+//ESTRUTURA COM OS VALORES DOS JOGADORES
 struct contaJogadores {
   String  codCartao;
   int num;
   float saldoConta;
 };
 
-
+//VARIAVEL QUE ARMAZENA OS JOGADORES DENTRO DE UM ARRAY
 struct contaJogadores players [qtdMaximaDeJogadores - 1];
+
+//VARIAVEL QUE ARMAZENA OS VALORES LIDOS DA EEPROM
+contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
 
 
 void setup() {
@@ -111,9 +114,10 @@ void setup() {
   leituraDoControle.onRun(controleRemoto);
   leituraDoControle.enabled = false;
 
-  iniciaCalculadora.setInterval(0);
+  iniciaCalculadora.setInterval(10);
   iniciaCalculadora.onRun(calculadora);
   iniciaCalculadora.enabled = false;
+
 
 
 
@@ -123,19 +127,14 @@ void setup() {
   cpu.add(&leituraDoControle);
   cpu.add(&leituraDoTeclado);
   cpu.add(&iniciaCalculadora);
+
+
 }
 
 
 void loop() {
-  //ler a tecla precionada e adiciona a variavel
+
   cpu.run();
-
-
-  //     players[0] = {"Leno", 1, 15000};
-  //   players[1] = {"joao", 2, 15000};
-  //   Serial.println(players[0].codCartao);
-  //   Serial.println(players[1].codCartao);
-  // delay(50000);
 
 }
 String textoDeMenu [] = {"Vamos jogar..."};
@@ -206,10 +205,10 @@ void esperandoCartao() {
     qtdDeJogadoresMenu.enabled = false;
     leituraDoControle.enabled = false;
     salvaNaEEPROM();
-
+    iniciaCalculadora.enabled = true;
+    //calculadora();
     printListaJogadores();
 
-    iniciaCalculadora.enabled = true;
 
   } else {
     exibeLcd(0, 0, "Aproxime o ");
@@ -229,8 +228,10 @@ void esperandoCartao() {
       lcd.clear();
       exibeLcd(0, 0, players[aux].codCartao + " " + String(players[aux].num));
       exibeLcd(0, 1, "R$ " + String(players[aux].saldoConta));
-      aux++;
+      
       Serial.println("add lista de jogadores");
+      Serial.println(players[aux].codCartao + " " + String(players[aux].num));
+      aux++;
       delay(1000);
     }
   }
@@ -239,19 +240,22 @@ void esperandoCartao() {
 //GRAVANDO NA EEPROM
 void salvaNaEEPROM() {
   for (int i = 0; i < qtdDeJogadores ; i++) {
-    int endereco = EEPROM_endereco + i *sizeof(contaJogadores);
+    int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
     EEPROM.put(endereco, players[i]);
   }
 
 }
 
-contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
+
+
+
 //LER EEPROM
 void lendoEPRROM() {
 
   for (int i = 0; i < qtdDeJogadores ; i++) {
     int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
     EEPROM.get(endereco, lerEeprom[i]);
+
   }
 
 
@@ -279,18 +283,20 @@ void printListaJogadores() {
     String num  = String(lerEeprom[i].num);
     String saldo = String(lerEeprom[i].saldoConta);
 
-     Serial.println(codCartao + " " + num + "-> saldo: R$ " + saldo);
+    Serial.println(codCartao + " " + num + "-> saldo: R$ " + saldo);
 
 
   }
 }
 
 //CALCULADORA
+
+//CALCULADORA
 int value1 = 0;
 int value2 = 0;
 char operation;
 
-void calculadora(){
+void calculadora() {
 
   char key = keypad.getKey();
 
@@ -328,14 +334,12 @@ void calculadora(){
       value2 = 0;
       operation = 0;
     }
+  } else {
+    lcd.setCursor(0, 0);
+    lcd.print("Digite o valor:");
+    delay(2000);
   }
 }
-
-
-
-
-
-
 
 
 //LEITURA DO TECLADO
