@@ -51,7 +51,8 @@ Thread qtdDeJogadoresMenu;
 Thread txtEsperandoCartao;
 Thread leituraDoControle; //depois mudar para RFID
 Thread iniciaCalculadora;
-
+Thread opAdicionar;
+Thread opRetirar;
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
 String valor = "";
 
@@ -96,7 +97,7 @@ void setup() {
   Serial.begin(9600);
 
   //INICIANDO INSTANCIAS DAS THREAD
-  leituraDoTeclado.setInterval(10);
+  leituraDoTeclado.setInterval(50);
   leituraDoTeclado.onRun(teclado);
 
   menuTextoLcd.setInterval(1005);
@@ -114,10 +115,17 @@ void setup() {
   leituraDoControle.onRun(controleRemoto);
   leituraDoControle.enabled = false;
 
-  iniciaCalculadora.setInterval(10);
+  iniciaCalculadora.setInterval(99);
   iniciaCalculadora.onRun(calculadora);
   iniciaCalculadora.enabled = false;
 
+  opAdicionar.setInterval(500);
+  opAdicionar.onRun(operacaoAdicionar);
+  opAdicionar.enabled = false;
+
+  opRetirar.setInterval(500);
+  opRetirar.onRun(operacaoRetirar);
+  opRetirar.enabled = false;
 
 
 
@@ -125,9 +133,11 @@ void setup() {
   cpu.add(&qtdDeJogadoresMenu);
   cpu.add(&txtEsperandoCartao);
   cpu.add(&leituraDoControle);
-  cpu.add(&leituraDoTeclado);
-  cpu.add(&iniciaCalculadora);
 
+  cpu.add(&iniciaCalculadora);
+  cpu.add(&opAdicionar);
+  cpu.add(&opRetirar);
+  cpu.add(&leituraDoTeclado);
 
 }
 
@@ -135,6 +145,8 @@ void setup() {
 void loop() {
 
   cpu.run();
+
+
 
 }
 String textoDeMenu [] = {"Vamos jogar..."};
@@ -228,7 +240,7 @@ void esperandoCartao() {
       lcd.clear();
       exibeLcd(0, 0, players[aux].codCartao + " " + String(players[aux].num));
       exibeLcd(0, 1, "R$ " + String(players[aux].saldoConta));
-      
+
       Serial.println("add lista de jogadores");
       Serial.println(players[aux].codCartao + " " + String(players[aux].num));
       aux++;
@@ -254,7 +266,7 @@ void lendoEPRROM() {
 
   for (int i = 0; i < qtdDeJogadores ; i++) {
     int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
-    EEPROM.get(endereco, lerEeprom[i]);
+    EEPROM.get(endereco, players[i]);
 
   }
 
@@ -278,13 +290,14 @@ boolean jogadorAdicionado() {
 void printListaJogadores() {
   Serial.println("LISTA DE JOGADORES");
   lendoEPRROM();
+  delay(50);
   for (int i = 0; i < qtdDeJogadores; i++) {
-    String codCartao = lerEeprom[i].codCartao;
-    String num  = String(lerEeprom[i].num);
-    String saldo = String(lerEeprom[i].saldoConta);
+    String codCartao = players[i].codCartao;
+    String num  = String(players[i].num);
+    String saldo = String(players[i].saldoConta);
 
-    Serial.println(codCartao + " " + num + "-> saldo: R$ " + saldo);
-
+    Serial.println("Cod: " + codCartao + " " + num + "-> saldo: R$ " + saldo);
+    delay(50);
 
   }
 }
@@ -292,53 +305,139 @@ void printListaJogadores() {
 //CALCULADORA
 
 //CALCULADORA
-int value1 = 0;
-int value2 = 0;
+long value1 = 0;
+long value2 = 0;
 char operation;
+String valorTela = "";
 
 void calculadora() {
 
-  char key = keypad.getKey();
+  leituraDoTeclado.enabled = true;
+receiver.resume();
+  char key = teclaPress[0];
 
-  if (key != NO_KEY) {
-    if (key >= '0' && key <= '9') {
-      // Adiciona o dígito ao valor atual
-      if (operation == 0) {
-        value1 = value1 * 10 + (key - '0');
-        lcd.setCursor(0, 0);
-        lcd.print(value1);
-      } else {
-        value2 = value2 * 10 + (key - '0');
-        lcd.setCursor(0, 1);
-        lcd.print(value2);
-      }
-    } else if (key == '+' || key == '-') {
-      // Define a operação
-      operation = key;
-      lcd.setCursor(0, 1);
-      lcd.print(key);
-    } else if (key == '#') {
-      // Realiza o cálculo e exibe o resultado
-      int result;
-      if (operation == '+') {
-        result = value1 + value2;
-      } else if (operation == '-') {
-        result = value1 - value2;
-      }
-      lcd.setCursor(0, 1);
-      lcd.print("= ");
-      lcd.print(result);
-      delay(2000);
-      lcd.clear();
-      value1 = 0;
-      value2 = 0;
-      operation = 0;
-    }
-  } else {
-    lcd.setCursor(0, 0);
-    lcd.print("Digite o valor:");
-    delay(2000);
+  //ERRO AQUI NAO QUER VALIDAR A TECLA
+  if (key >= '0' && key <= '9') {
+
+    valorTela += teclaPress;
+    teclaPress = "";
+    lcd.setCursor(0, 1);
+    lcd.print(valorTela);
+    value2 = valorTela.toInt();
+    key = "";
+  } else if (key == '+' ) {
+    // Define a operação
+    teclaPress = "";
+    valorTela = "";
+    opAdicionar.enabled = true;
+    iniciaCalculadora.enabled = false;
+    key = "";
+  } else if (key == '-' ) {
+    // Define a operação
+    teclaPress = "";
+    valorTela = "";
+    opRetirar.enabled = true;
+    iniciaCalculadora.enabled = false;
+    key = "";
   }
+  else if (key == '*' ) {
+    // Define a operação
+    teclaPress = "";
+    valorTela = "";
+    key = "";
+    printListaJogadores();
+     
+  }
+  else {
+    lcd.setCursor(0, 0);
+    lcd.print("Digite o valor:" );
+  }
+
+}
+
+
+void operacaoAdicionar() {
+
+  leituraDoControle.enabled = true;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Aproxime cartao");
+
+  if (!valor.equals("")) {
+    int posicaoJogador = procuraJogador();;
+
+    if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
+
+      players[posicaoJogador].saldoConta += value2;
+      mostraNovoSaldo(posicaoJogador);
+      opAdicionar.enabled = false;
+
+    }
+  }
+
+
+}
+
+void operacaoRetirar() {
+  leituraDoControle.enabled = true;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Aproxime cartao");
+
+  if (!valor.equals("")) {
+    int posicaoJogador = procuraJogador();;
+
+    if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
+
+      players[posicaoJogador].saldoConta -= value2;
+
+      mostraNovoSaldo(posicaoJogador);
+      opRetirar.enabled = false;
+
+    }
+  }
+
+}
+
+void mostraNovoSaldo(int posicaoJogador) {
+  salvaNaEEPROM();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Saldo " + players[posicaoJogador].codCartao);
+  lcd.setCursor(0, 1);
+  lcd.print("R$ " + String(players[posicaoJogador].saldoConta));
+
+
+  delay(2000);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Concluido");
+  delay(500);
+  leituraDoControle.enabled = false;
+  iniciaCalculadora.enabled = true;
+
+}
+
+
+//RETORNA A POSIÇÃO DO JOGADOR NA LISTA
+int procuraJogador() {
+
+  //controleRemoto();
+
+  for (int i = 0 ; i < qtdDeJogadores ; i++) {
+
+    if (players[i].codCartao.equals(valor)) {
+     // Serial.println("Encontrou");
+      valor = "";
+      return i;
+    }
+    //Serial.println("procurando...");
+  }
+
+  return -1;
+
 }
 
 
@@ -354,7 +453,7 @@ void teclado() {
     } else {
 
       teclaPress = tecla;
-      Serial.println(teclaPress);
+    //  Serial.println(teclaPress);
     }
   }
 }
@@ -378,9 +477,10 @@ void controleRemoto() {
   valor = "";
   // Checks received an IR signal
   if (receiver.decode()) {
-    Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
+    //Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
     valor = receiver.decodedIRData.command;
     receiver.resume();  // Receive the next value
   }
 
 }
+
