@@ -23,7 +23,7 @@ byte colunaPinos[] = {A0, A1, A2, A3};
 char teclas[linhas][colunas] = {
   {'1', '2', '3', '+'}, //acrescentar
   {'4', '5', '6', '-'}, //Subtrair
-  {'7', '8', '9', 'T'}, //Transferir
+  {'7', '8', '9', 'C'}, //Transferir
   {'*', '0', '#', 'D'}  //Desfazer
 };
 // Criação do objeto Keypad
@@ -53,6 +53,7 @@ Thread leituraDoControle; //depois mudar para RFID
 Thread iniciaCalculadora;
 Thread opAdicionar;
 Thread opRetirar;
+Thread opTransferir;
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
 String valor = "";
 
@@ -128,6 +129,10 @@ void setup() {
   opRetirar.enabled = false;
 
 
+  opTransferir.setInterval(500);
+  opTransferir.onRun(operacaoTransferir);
+  opTransferir.enabled = false;
+
 
   cpu.add(&menuTextoLcd);
   cpu.add(&qtdDeJogadoresMenu);
@@ -137,6 +142,7 @@ void setup() {
   cpu.add(&iniciaCalculadora);
   cpu.add(&opAdicionar);
   cpu.add(&opRetirar);
+  cpu.add(&opTransferir);
   cpu.add(&leituraDoTeclado);
 
 }
@@ -185,7 +191,7 @@ void qtdJogadores() {
 
 
   if (teclaPress.toInt() > 1 && teclaPress.toInt() <= qtdMaximaDeJogadores) {
-    Serial.println(teclaPress + " jogadores selecionados");
+   // Serial.println(teclaPress + " jogadores selecionados");
 
     qtdDeJogadoresMenu.enabled = false;
 
@@ -193,7 +199,7 @@ void qtdJogadores() {
 
     txtEsperandoCartao.enabled = true;
     teclaPress = "";
-    //GRAVA NO EPROM O VALOR PADRÃO NA CONTA
+   
 
   }
   if (!teclaPress.equals("")) {
@@ -241,8 +247,6 @@ void esperandoCartao() {
       exibeLcd(0, 0, players[aux].codCartao + " " + String(players[aux].num));
       exibeLcd(0, 1, "R$ " + String(players[aux].saldoConta));
 
-      Serial.println("add lista de jogadores");
-      Serial.println(players[aux].codCartao + " " + String(players[aux].num));
       aux++;
       delay(1000);
     }
@@ -250,27 +254,30 @@ void esperandoCartao() {
 
 }
 //GRAVANDO NA EEPROM
+bool MEMORIA_ATUALIZADA = false;
 void salvaNaEEPROM() {
+ 
   for (int i = 0; i < qtdDeJogadores ; i++) {
     int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
     EEPROM.put(endereco, players[i]);
+  
   }
-
+  MEMORIA_ATUALIZADA = true;
+ 
 }
-
-
-
 
 //LER EEPROM
 void lendoEPRROM() {
+  if (MEMORIA_ATUALIZADA) { 
+   
+     for (int i = 0; i < qtdDeJogadores ; i++) {
 
-  for (int i = 0; i < qtdDeJogadores ; i++) {
-    int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
-    EEPROM.get(endereco, players[i]);
-
+      int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
+      EEPROM.get(endereco, lerEeprom[i]);
+     
+    }
+    MEMORIA_ATUALIZADA = false;
   }
-
-
 }
 
 //Verifica se o cartão do jogador já foi adicionado na lista
@@ -292,17 +299,15 @@ void printListaJogadores() {
   lendoEPRROM();
   delay(50);
   for (int i = 0; i < qtdDeJogadores; i++) {
-    String codCartao = players[i].codCartao;
-    String num  = String(players[i].num);
-    String saldo = String(players[i].saldoConta);
+    String codCartao = lerEeprom[i].codCartao;
+    String num  = String(lerEeprom[i].num);
+    String saldo = String(lerEeprom[i].saldoConta);
 
     Serial.println("Cod: " + codCartao + " " + num + "-> saldo: R$ " + saldo);
     delay(50);
 
   }
 }
-
-//CALCULADORA
 
 //CALCULADORA
 long value1 = 0;
@@ -313,7 +318,7 @@ String valorTela = "";
 void calculadora() {
 
   leituraDoTeclado.enabled = true;
-receiver.resume();
+  receiver.resume();
   char key = teclaPress[0];
 
   //ERRO AQUI NAO QUER VALIDAR A TECLA
@@ -346,8 +351,18 @@ receiver.resume();
     valorTela = "";
     key = "";
     printListaJogadores();
-     
+
   }
+  else if (key == 'C' ) {
+    // Define a operação
+    teclaPress = "";
+    valorTela = "";
+    key = "";
+    iniciaCalculadora.enabled = false;
+    opTransferir.enabled = true;
+
+  }
+
   else {
     lcd.setCursor(0, 0);
     lcd.print("Digite o valor:" );
@@ -355,7 +370,7 @@ receiver.resume();
 
 }
 
-
+//OPERAÇÃO DE ADICIONAR DINHEIRO A CONTA
 void operacaoAdicionar() {
 
   leituraDoControle.enabled = true;
@@ -379,6 +394,7 @@ void operacaoAdicionar() {
 
 }
 
+//OPERAÇÃO DE RETIRAR DINHEIRO A CONTA
 void operacaoRetirar() {
   leituraDoControle.enabled = true;
 
@@ -392,7 +408,6 @@ void operacaoRetirar() {
     if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
 
       players[posicaoJogador].saldoConta -= value2;
-
       mostraNovoSaldo(posicaoJogador);
       opRetirar.enabled = false;
 
@@ -401,6 +416,48 @@ void operacaoRetirar() {
 
 }
 
+int jogadorCont = 0;
+
+
+void operacaoTransferir() {
+
+  leituraDoControle.enabled = true;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Aproxime cartao");
+  lcd.setCursor(0, 1);
+  lcd.print(String(jogadorCont) + "o Jogador");
+
+  if (!valor.equals("")) {
+    int posicaoJogador = procuraJogador();;
+
+    if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
+      if (jogadorCont == 0) {
+        players[posicaoJogador].saldoConta -= value2;
+        jogadorCont++;
+
+      } else if (jogadorCont == 1) {
+
+        players[posicaoJogador].saldoConta += value2;
+
+
+        mostraNovoSaldo(posicaoJogador);
+        opTransferir.enabled = false;
+        iniciaCalculadora.enabled = true;
+      }
+
+
+    }
+  }
+
+
+}
+
+
+
+
+//EXIBE NO LCD O NOVO SALDO E SALVA NA EEPROM O NOVO SALDO
 void mostraNovoSaldo(int posicaoJogador) {
   salvaNaEEPROM();
   lcd.clear();
@@ -429,7 +486,7 @@ int procuraJogador() {
   for (int i = 0 ; i < qtdDeJogadores ; i++) {
 
     if (players[i].codCartao.equals(valor)) {
-     // Serial.println("Encontrou");
+      // Serial.println("Encontrou");
       valor = "";
       return i;
     }
@@ -453,7 +510,7 @@ void teclado() {
     } else {
 
       teclaPress = tecla;
-    //  Serial.println(teclaPress);
+      //  Serial.println(teclaPress);
     }
   }
 }
