@@ -19,13 +19,8 @@ const byte colunas = 4;
 byte linhaPinos[] = {8, 9, 10, 11};
 byte colunaPinos[] = {A0, A1, A2, A3};
 
-// Matriz de caracteres que representa as teclas do teclado matricial
-char teclas[linhas][colunas] = {
-  {'1', '2', '3', '+'}, //acrescentar
-  {'4', '5', '6', '-'}, //Subtrair
-  {'7', '8', '9', 'C'}, //Transferir
-  {'*', '0', '#', 'D'}  //Desfazer
-};
+// caracteres que representa as teclas do teclado matricial
+char teclas[] = {'1', '2', '3', '+', '4', '5', '6', '-', '7', '8', '9', 'C', '*', '0', '#', 'D'};
 // Criação do objeto Keypad
 Keypad keypad = Keypad(makeKeymap(teclas), linhaPinos, colunaPinos, linhas, colunas);
 
@@ -57,10 +52,9 @@ Thread opTransferir;
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
 String valor = "";
 
-String menu = "";
 String teclaPress = "";
 
-float dinheiroInicial = 15000;
+const float dinheiroInicial = 10000;
 
 int qtdDeJogadores = 0;
 
@@ -155,7 +149,6 @@ void loop() {
 
 
 }
-String textoDeMenu [] = {"Vamos jogar..."};
 
 //MENU INICIAL
 void menuDeInicio() {
@@ -176,10 +169,6 @@ void menuDeInicio() {
     qtdDeJogadoresMenu.enabled = true;
   }
 
-  else {
-    menu = "";
-  }
-
 }
 
 //MENU DE SELÇÃO PARA QUANTIDADE DE JOGADORES
@@ -191,7 +180,7 @@ void qtdJogadores() {
 
 
   if (teclaPress.toInt() > 1 && teclaPress.toInt() <= qtdMaximaDeJogadores) {
-   // Serial.println(teclaPress + " jogadores selecionados");
+    // Serial.println(teclaPress + " jogadores selecionados");
 
     qtdDeJogadoresMenu.enabled = false;
 
@@ -199,7 +188,7 @@ void qtdJogadores() {
 
     txtEsperandoCartao.enabled = true;
     teclaPress = "";
-   
+
 
   }
   if (!teclaPress.equals("")) {
@@ -256,25 +245,25 @@ void esperandoCartao() {
 //GRAVANDO NA EEPROM
 bool MEMORIA_ATUALIZADA = false;
 void salvaNaEEPROM() {
- 
+
   for (int i = 0; i < qtdDeJogadores ; i++) {
     int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
     EEPROM.put(endereco, players[i]);
-  
+
   }
   MEMORIA_ATUALIZADA = true;
- 
+
 }
 
 //LER EEPROM
 void lendoEPRROM() {
-  if (MEMORIA_ATUALIZADA) { 
-   
-     for (int i = 0; i < qtdDeJogadores ; i++) {
+  if (MEMORIA_ATUALIZADA) {
+
+    for (int i = 0; i < qtdDeJogadores ; i++) {
 
       int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
       EEPROM.get(endereco, lerEeprom[i]);
-     
+
     }
     MEMORIA_ATUALIZADA = false;
   }
@@ -295,24 +284,36 @@ boolean jogadorAdicionado() {
 
 //IMPRIME LISTA DE JOGADORES
 void printListaJogadores() {
-  Serial.println("LISTA DE JOGADORES");
+  // Serial.println("LISTA DE JOGADORES");
   lendoEPRROM();
+  //Serial.println();
   delay(50);
+  lcd.clear();
   for (int i = 0; i < qtdDeJogadores; i++) {
     String codCartao = lerEeprom[i].codCartao;
     String num  = String(lerEeprom[i].num);
     String saldo = String(lerEeprom[i].saldoConta);
 
     Serial.println("Cod: " + codCartao + " " + num + "-> saldo: R$ " + saldo);
-    delay(50);
+    exibeLcd(0, 0, "Jogador "+num+":");
+    exibeLcd(0, 1, "R$ "+saldo);
+    delay(1000);
 
   }
+  lcd.clear();
 }
 
 //CALCULADORA
-long value1 = 0;
+struct opRealizada {
+  String operador;
+  int posJog1;
+  int posJog2;
+  long valorTransferido;
+};
+
+opRealizada dadosDesfazer = {"", -1, -1, 0 };
+
 long value2 = 0;
-char operation;
 String valorTela = "";
 
 void calculadora() {
@@ -330,14 +331,14 @@ void calculadora() {
     lcd.print(valorTela);
     value2 = valorTela.toInt();
     key = "";
-  } else if (key == '+' ) {
+  } else if (key == '+' && value2 != 0 ) {
     // Define a operação
     teclaPress = "";
     valorTela = "";
     opAdicionar.enabled = true;
     iniciaCalculadora.enabled = false;
     key = "";
-  } else if (key == '-' ) {
+  } else if (key == '-'  && value2 != 0) {
     // Define a operação
     teclaPress = "";
     valorTela = "";
@@ -353,7 +354,7 @@ void calculadora() {
     printListaJogadores();
 
   }
-  else if (key == 'C' ) {
+  else if (key == 'C' && value2 != 0) {
     // Define a operação
     teclaPress = "";
     valorTela = "";
@@ -362,10 +363,33 @@ void calculadora() {
     opTransferir.enabled = true;
 
   }
+  else if (key == 'D' && !valorTela.equals("")) {
+    key = "";
+    teclaPress = "";
+    lcd.setCursor(valorTela.length() - 1, 1);
+    lcd.print(" ");
+    valorTela = valorTela.substring(0, valorTela.length() - 1);
+    dadosDesfazer = {"", -1, -1, 0 };
+
+    value2 = valorTela.toInt();
+
+  }
+  else if (key == 'D' && valorTela.equals("") ) {
+    // Define a operação
+    teclaPress = "";
+    valorTela = "";
+    key = "";
+    value2 = 0;
+    //iniciaCalculadora.enabled = false;
+    operacaoDesfazer();
+
+  }
 
   else {
+    
     lcd.setCursor(0, 0);
     lcd.print("Digite o valor:" );
+
   }
 
 }
@@ -386,10 +410,16 @@ void operacaoAdicionar() {
 
       players[posicaoJogador].saldoConta += value2;
       mostraNovoSaldo(posicaoJogador);
+
+      dadosDesfazer = {"+", posicaoJogador, -1, value2 };
+      value2 = 0;
+
       opAdicionar.enabled = false;
 
     }
   }
+
+
 
 
 }
@@ -409,14 +439,19 @@ void operacaoRetirar() {
 
       players[posicaoJogador].saldoConta -= value2;
       mostraNovoSaldo(posicaoJogador);
+
+      dadosDesfazer = {"-", posicaoJogador, -1, value2 };
+      value2 = 0;
       opRetirar.enabled = false;
+
+
 
     }
   }
 
 }
 
-int jogadorCont = 0;
+byte jogadorCont = 0;
 
 
 void operacaoTransferir() {
@@ -427,7 +462,9 @@ void operacaoTransferir() {
   lcd.setCursor(0, 0);
   lcd.print("Aproxime cartao");
   lcd.setCursor(0, 1);
-  lcd.print(String(jogadorCont) + "o Jogador");
+  lcd.print(String(jogadorCont + 1) + "o Jogador");
+
+
 
   if (!valor.equals("")) {
     int posicaoJogador = procuraJogador();;
@@ -437,25 +474,66 @@ void operacaoTransferir() {
         players[posicaoJogador].saldoConta -= value2;
         jogadorCont++;
 
+        dadosDesfazer.posJog1 = posicaoJogador;
+
       } else if (jogadorCont == 1) {
 
         players[posicaoJogador].saldoConta += value2;
-
-
         mostraNovoSaldo(posicaoJogador);
+        dadosDesfazer.posJog2 = posicaoJogador;
+        dadosDesfazer.operador = "T";
+        dadosDesfazer.valorTransferido = value2;
+
+        value2 = 0;
+        jogadorCont = 0;
         opTransferir.enabled = false;
         iniciaCalculadora.enabled = true;
-      }
 
+      }
+    }
+  }
+}
+//desfaz a ultima ação
+
+
+
+void operacaoDesfazer() {
+
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Desfazendo");
+
+
+
+  if (!dadosDesfazer.operador.equals("")) {
+
+    int posicaoJogador = dadosDesfazer.posJog1;
+
+
+    if (dadosDesfazer.operador.equals("+")) {
+      players[posicaoJogador].saldoConta -= dadosDesfazer.valorTransferido;
+      mostraNovoSaldo(posicaoJogador);
+      dadosDesfazer = {"", -1, -1, 0 };
+
+    }
+    else if (dadosDesfazer.operador.equals("-")) {
+      players[posicaoJogador].saldoConta += dadosDesfazer.valorTransferido;
+      mostraNovoSaldo(posicaoJogador);
+      dadosDesfazer = {"", -1, -1, 0 };
+
+    } else if (dadosDesfazer.operador.equals("T")) {
+      // Serial.print("pos "+String(dadosDesfazer.posJog1)+ "\nPOs2 "+String(dadosDesfazer.posJog2) +" valor "+String(dadosDesfazer.valorTransferido));
+      players[dadosDesfazer.posJog1].saldoConta += dadosDesfazer.valorTransferido;
+      players[dadosDesfazer.posJog2].saldoConta -= dadosDesfazer.valorTransferido;
+      mostraNovoSaldo(dadosDesfazer.posJog1);
+      dadosDesfazer = {"", -1, -1, 0 };
 
     }
   }
-
-
 }
 
-
-
+//exibe no serial
 
 //EXIBE NO LCD O NOVO SALDO E SALVA NA EEPROM O NOVO SALDO
 void mostraNovoSaldo(int posicaoJogador) {
