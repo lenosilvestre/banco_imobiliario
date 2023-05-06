@@ -40,7 +40,7 @@ LiquidCrystal lcd(rs, enable, d4, d5, d6, d7);
 
 ThreadController cpu;
 ThreadController sensores;
-Thread leituraDoTeclado;
+//Thread leituraDoTeclado;
 Thread menuTextoLcd;
 Thread qtdDeJogadoresMenu;
 Thread txtEsperandoCartao;
@@ -52,9 +52,9 @@ Thread opTransferir;
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
 String valor = "";
 
-String teclaPress = "";
+//String teclaPress = "";
 
-const float dinheiroInicial = 10000;
+const float dinheiroInicial = 100;
 
 int qtdDeJogadores = 0;
 
@@ -74,7 +74,7 @@ struct contaJogadores {
 struct contaJogadores players [qtdMaximaDeJogadores - 1];
 
 //VARIAVEL QUE ARMAZENA OS VALORES LIDOS DA EEPROM
-contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
+//contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
 
 
 void setup() {
@@ -92,21 +92,21 @@ void setup() {
   Serial.begin(9600);
 
   //INICIANDO INSTANCIAS DAS THREAD
-  leituraDoTeclado.setInterval(50);
-  leituraDoTeclado.onRun(teclado);
+  // leituraDoTeclado.setInterval(50);
+  // leituraDoTeclado.onRun(teclado);
 
-  menuTextoLcd.setInterval(1005);
+  menuTextoLcd.setInterval(10);
   menuTextoLcd.onRun(menuDeInicio);
 
-  qtdDeJogadoresMenu.setInterval(1000);
+  qtdDeJogadoresMenu.setInterval(10);
   qtdDeJogadoresMenu.onRun(qtdJogadores);
   qtdDeJogadoresMenu.enabled = false;
 
-  txtEsperandoCartao.setInterval(1001);
+  txtEsperandoCartao.setInterval(1000);
   txtEsperandoCartao.onRun(esperandoCartao);
   txtEsperandoCartao.enabled = false;
 
-  leituraDoControle.setInterval(1000);
+  leituraDoControle.setInterval(10);
   leituraDoControle.onRun(controleRemoto);
   leituraDoControle.enabled = false;
 
@@ -137,7 +137,7 @@ void setup() {
   cpu.add(&opAdicionar);
   cpu.add(&opRetirar);
   cpu.add(&opTransferir);
-  cpu.add(&leituraDoTeclado);
+  //  cpu.add(&leituraDoTeclado);
 
 }
 
@@ -159,13 +159,14 @@ void menuDeInicio() {
   lcd.setCursor(0, 1);
   lcd.print("1-Sim  2-Nao");
 
+  char tecla = keypad.getKey();
 
-  if (teclaPress.equals("1")) {
+  if (tecla == '1') {
     menuTextoLcd.enabled = false;
     lcd.clear();
     exibeLcd(0, 0, "Vamos jogar...");
-    teclaPress = "";
     delay(1000);
+    lcd.clear();
     qtdDeJogadoresMenu.enabled = true;
   }
 
@@ -173,31 +174,26 @@ void menuDeInicio() {
 
 //MENU DE SELÇÃO PARA QUANTIDADE DE JOGADORES
 void qtdJogadores() {
-  lcd.clear();
 
   exibeLcd(0, 0, "Qtd de jogadores");
   exibeLcd(0, 1, "de 2 a " + String(qtdMaximaDeJogadores));
 
+  int tecla = keypad.getKey() - '0';
 
-  if (teclaPress.toInt() > 1 && teclaPress.toInt() <= qtdMaximaDeJogadores) {
-    // Serial.println(teclaPress + " jogadores selecionados");
+  if (tecla > 1 &&  tecla <= qtdMaximaDeJogadores) {
 
     qtdDeJogadoresMenu.enabled = false;
-
-    qtdDeJogadores =  teclaPress.toInt();;
-
+    qtdDeJogadores =  tecla;
+    lcd.clear();
     txtEsperandoCartao.enabled = true;
-    teclaPress = "";
 
-
-  }
-  if (!teclaPress.equals("")) {
+  } else if (tecla > qtdMaximaDeJogadores ) {
+    lcd.clear();
     exibeLcd(0, 0, "Selecione de 2 a ");
     exibeLcd(0, 1, String(qtdMaximaDeJogadores) + " jogadores        ");
-    teclaPress = "";
     delay(1000);
+    lcd.clear();
   }
-
 
 }
 
@@ -208,40 +204,55 @@ void esperandoCartao() {
   lcd.clear();
 
   if ( aux == qtdDeJogadores) { //Quantidade de cartões lida = a quantidade maxima de jogadores
+
+    salvaNaEEPROM();
+
+    //calculadora();
+    printListaJogadores();
+    lcd.clear();
+
     txtEsperandoCartao.enabled = false;
     qtdDeJogadoresMenu.enabled = false;
     leituraDoControle.enabled = false;
-    salvaNaEEPROM();
     iniciaCalculadora.enabled = true;
-    //calculadora();
-    printListaJogadores();
-
 
   } else {
-    exibeLcd(0, 0, "Aproxime o ");
-    // exibeLcd(0, 1, "cartao");
-
-    exibeLcd(0, 1, "cartao " + String(aux + 1));
-    leituraDoControle.enabled = true;
+    int cartao = aproximaCartao();
 
 
-    if (!valor.equals("") && !jogadorAdicionado()) {
-      players[aux].codCartao = valor; //codigo do cartão
+
+    if (cartao != -1 && !jogadorAdicionado(cartao)) {
+
+      players[aux].codCartao = String(cartao); //codigo do cartão
       players[aux].num = aux + 1;
       players[aux].saldoConta = dinheiroInicial;
-
-      valor = "";
-
       lcd.clear();
       exibeLcd(0, 0, players[aux].codCartao + " " + String(players[aux].num));
       exibeLcd(0, 1, "R$ " + String(players[aux].saldoConta));
-
       aux++;
-      delay(1000);
     }
   }
 
 }
+
+int aproximaCartao() {
+
+  exibeLcd(0, 0, "Aproxime o ");
+  exibeLcd(0, 1, "cartao " + String(aux + 1));
+
+  if (receiver.decode()) {
+    //Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
+    int vlControle = receiver.decodedIRData.command;
+    receiver.resume();
+    return  vlControle;
+    // Receive the next value
+  } else {
+    return -1;
+  }
+
+}
+
+
 //GRAVANDO NA EEPROM
 bool MEMORIA_ATUALIZADA = false;
 void salvaNaEEPROM() {
@@ -262,25 +273,24 @@ void lendoEPRROM() {
     for (int i = 0; i < qtdDeJogadores ; i++) {
 
       int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
-      EEPROM.get(endereco, lerEeprom[i]);
+      EEPROM.get(endereco, players[i]);
 
     }
     MEMORIA_ATUALIZADA = false;
+
+
   }
 }
 
 //Verifica se o cartão do jogador já foi adicionado na lista
-boolean jogadorAdicionado() {
-  int cont = 0;
+boolean jogadorAdicionado(int cartao) {
   for (int i = 0 ; i < qtdDeJogadores ; i++) {
-    if (players[i].codCartao.equals(valor)) {
-      valor = "";
-      cont++;
+    if (players[i].codCartao.equals(String(cartao))) {
+      return true;
     }
   }
-  return cont > 0 ? true : false;
+  return  false;
 }
-
 
 //IMPRIME LISTA DE JOGADORES
 void printListaJogadores() {
@@ -290,13 +300,13 @@ void printListaJogadores() {
   delay(50);
   lcd.clear();
   for (int i = 0; i < qtdDeJogadores; i++) {
-    String codCartao = lerEeprom[i].codCartao;
-    String num  = String(lerEeprom[i].num);
-    String saldo = String(lerEeprom[i].saldoConta);
+    String codCartao = players[i].codCartao;
+    String num  = String(players[i].num);
+    String saldo = String(players[i].saldoConta);
 
-    Serial.println("Cod: " + codCartao + " " + num + "-> saldo: R$ " + saldo);
-    exibeLcd(0, 0, "Jogador "+num+":");
-    exibeLcd(0, 1, "R$ "+saldo);
+    //  Serial.println("Cod: " + codCartao + " " + num + "-> saldo: R$ " + saldo);
+    exibeLcd(0, 0, "Jogador " + num + ":");
+    exibeLcd(0, 1, "R$ " + saldo);
     delay(1000);
 
   }
@@ -317,30 +327,29 @@ long value2 = 0;
 String valorTela = "";
 
 void calculadora() {
-
-  leituraDoTeclado.enabled = true;
+  String teclaPress = "";
+  //leituraDoTeclado.enabled = true;
   receiver.resume();
-  char key = teclaPress[0];
+  char key =  keypad.getKey();
 
   //ERRO AQUI NAO QUER VALIDAR A TECLA
   if (key >= '0' && key <= '9') {
 
-    valorTela += teclaPress;
-    teclaPress = "";
+    valorTela += key;
     lcd.setCursor(0, 1);
     lcd.print(valorTela);
     value2 = valorTela.toInt();
     key = "";
   } else if (key == '+' && value2 != 0 ) {
     // Define a operação
-    teclaPress = "";
     valorTela = "";
     opAdicionar.enabled = true;
+
     iniciaCalculadora.enabled = false;
     key = "";
+
   } else if (key == '-'  && value2 != 0) {
     // Define a operação
-    teclaPress = "";
     valorTela = "";
     opRetirar.enabled = true;
     iniciaCalculadora.enabled = false;
@@ -348,7 +357,6 @@ void calculadora() {
   }
   else if (key == '*' ) {
     // Define a operação
-    teclaPress = "";
     valorTela = "";
     key = "";
     printListaJogadores();
@@ -356,16 +364,15 @@ void calculadora() {
   }
   else if (key == 'C' && value2 != 0) {
     // Define a operação
-    teclaPress = "";
     valorTela = "";
     key = "";
     iniciaCalculadora.enabled = false;
     opTransferir.enabled = true;
+    //operacaoTransferir();
 
   }
   else if (key == 'D' && !valorTela.equals("")) {
     key = "";
-    teclaPress = "";
     lcd.setCursor(valorTela.length() - 1, 1);
     lcd.print(" ");
     valorTela = valorTela.substring(0, valorTela.length() - 1);
@@ -376,7 +383,6 @@ void calculadora() {
   }
   else if (key == 'D' && valorTela.equals("") ) {
     // Define a operação
-    teclaPress = "";
     valorTela = "";
     key = "";
     value2 = 0;
@@ -386,7 +392,7 @@ void calculadora() {
   }
 
   else {
-    
+
     lcd.setCursor(0, 0);
     lcd.print("Digite o valor:" );
 
@@ -582,15 +588,10 @@ void teclado() {
 
   if (tecla != NO_KEY) {
 
-    //se a tecla A for precionada apga o ultimo caractere
-    if (tecla == 'A') {
-      apagarCaractere();
-    } else {
 
-      teclaPress = tecla;
-      //  Serial.println(teclaPress);
-    }
+    //     //  Serial.println(teclaPress);
   }
+
 }
 
 //FUNÇÃO PARA APAGAR UM DIGITO
