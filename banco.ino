@@ -41,7 +41,7 @@ LiquidCrystal lcd(rs, enable, d4, d5, d6, d7);
 ThreadController cpu;
 ThreadController sensores;
 //Thread leituraDoTeclado;
-Thread menuTextoLcd;
+Thread menuInicial;
 Thread qtdDeJogadoresMenu;
 Thread txtEsperandoCartao;
 Thread leituraDoControle; //depois mudar para RFID
@@ -71,7 +71,7 @@ struct contaJogadores {
 };
 
 //VARIAVEL QUE ARMAZENA OS JOGADORES DENTRO DE UM ARRAY
-struct contaJogadores players [qtdMaximaDeJogadores - 1];
+struct contaJogadores players [qtdMaximaDeJogadores ];
 
 //VARIAVEL QUE ARMAZENA OS VALORES LIDOS DA EEPROM
 //contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
@@ -95,8 +95,8 @@ void setup() {
   // leituraDoTeclado.setInterval(50);
   // leituraDoTeclado.onRun(teclado);
 
-  menuTextoLcd.setInterval(10);
-  menuTextoLcd.onRun(menuDeInicio);
+  menuInicial.setInterval(10);
+  menuInicial.onRun(menuDeInicio);
 
   qtdDeJogadoresMenu.setInterval(10);
   qtdDeJogadoresMenu.onRun(qtdJogadores);
@@ -128,7 +128,7 @@ void setup() {
   opTransferir.enabled = false;
 
 
-  cpu.add(&menuTextoLcd);
+  cpu.add(&menuInicial);
   cpu.add(&qtdDeJogadoresMenu);
   cpu.add(&txtEsperandoCartao);
   cpu.add(&leituraDoControle);
@@ -162,7 +162,7 @@ void menuDeInicio() {
   char tecla = keypad.getKey();
 
   if (tecla == '1') {
-    menuTextoLcd.enabled = false;
+    menuInicial.enabled = false;
     lcd.clear();
     exibeLcd(0, 0, "Vamos jogar...");
     delay(1000);
@@ -205,21 +205,17 @@ void esperandoCartao() {
 
   if ( aux == qtdDeJogadores) { //Quantidade de cartões lida = a quantidade maxima de jogadores
 
-    salvaNaEEPROM();
+   // salvaNaEEPROM();
 
     //calculadora();
     printListaJogadores();
     lcd.clear();
 
-    txtEsperandoCartao.enabled = false;
-    qtdDeJogadoresMenu.enabled = false;
-    leituraDoControle.enabled = false;
+    menuInicial.enabled = false;
     iniciaCalculadora.enabled = true;
-
+    txtEsperandoCartao.enabled = false;
   } else {
     int cartao = aproximaCartao();
-
-
 
     if (cartao != -1 && !jogadorAdicionado(cartao)) {
 
@@ -229,6 +225,7 @@ void esperandoCartao() {
       lcd.clear();
       exibeLcd(0, 0, players[aux].codCartao + " " + String(players[aux].num));
       exibeLcd(0, 1, "R$ " + String(players[aux].saldoConta));
+
       aux++;
     }
   }
