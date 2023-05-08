@@ -50,18 +50,19 @@ Thread opAdicionar;
 Thread opRetirar;
 Thread opTransferir;
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
+String valorTela = "";
+//variavel que armazena o valor da transação
+long value2 = 0;
 
-
-//String teclaPress = "";
-
-const float dinheiroInicial = 100;
+float dinheiroInicial = 100;
 
 int qtdDeJogadores = 0;
 
 const int qtdMaximaDeJogadores = 6; //define o maximo de jogadores
 
-int EEPROM_endereco = 0;
+int EEPROM_endereco = 10;
 
+bool MEMORIA_ATUALIZADA = false; //verificador se houve atualização na lista de jogadores
 
 //ESTRUTURA COM OS VALORES DOS JOGADORES
 struct contaJogadores {
@@ -73,13 +74,11 @@ struct contaJogadores {
 //VARIAVEL QUE ARMAZENA OS JOGADORES DENTRO DE UM ARRAY
 struct contaJogadores players [qtdMaximaDeJogadores ];
 
-//VARIAVEL QUE ARMAZENA OS VALORES LIDOS DA EEPROM
-//contaJogadores lerEeprom[qtdMaximaDeJogadores - 1];
+//VARIAVEL QUE ARMAZENA OS VALORES DE TESTE
+struct contaJogadores plTeste [qtdMaximaDeJogadores ];
 
 
 void setup() {
-
-
 
   // Inicializa o receptor IR
   receiver.enableIRIn();
@@ -137,14 +136,35 @@ void setup() {
 
 }
 
-
 void loop() {
 
   cpu.run();
 
-
-
 }
+
+//Função de teste
+
+/*
+  void salvaNaEEPROM2() {
+
+  plTeste[0] = {"48", 1, 98};
+  plTeste[1] = {"24", 2, 97};
+  plTeste[2] = {"50", 3, 99};
+  plTeste[3] = {"60", 4, 100};
+  plTeste[4] = {"10", 5, 101};
+  plTeste[5] = {"98", 6, 102};
+  EEPROM.put(0, 6); //marcador de quantidade do jogadores
+
+
+  int vl ;
+  EEPROM.get(0, vl);
+  for (int i = 0; i < vl ; i++) {
+    int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
+    EEPROM.put(endereco, plTeste[i]);
+  }
+  MEMORIA_ATUALIZADA = true;
+  } */
+
 
 //MENU INICIAL
 void menuDeInicio() {
@@ -164,9 +184,59 @@ void menuDeInicio() {
     delay(1000);
     lcd.clear();
     qtdDeJogadoresMenu.enabled = true;
+  } else if (tecla == '2') {
+
+    // salvaNaEEPROM2(); // para teste
+
+    EEPROM.get(0, qtdDeJogadores);
+
+    if (qtdDeJogadores > 1) {
+      lcd.clear();
+      exibeLcd(0, 0, "Continuando...");
+      delay(1000);
+      MEMORIA_ATUALIZADA = true;
+      printListaJogadores();
+      menuInicial.enabled = false;
+      iniciaCalculadora.enabled = true;
+
+    } else {
+
+      lcd.clear();
+      exibeLcd(0, 0, "nao tem jogos");
+      exibeLcd(0, 1, "salvos");
+      delay(1000);
+      lcd.clear();
+
+    }
+
+  } else if (tecla == '#') {
+    char key =  keypad.getKey();
+    lcd.clear();
+    while (key != '+') {
+      lcd.setCursor(0, 0);
+      lcd.print("Digite o valor:" );
+      key =  keypad.getKey();
+      if (key >= '0' && key <= '9') {
+
+        valorTela += key;
+        lcd.setCursor(0, 1);
+        lcd.print(valorTela);
+        dinheiroInicial = valorTela.toInt();
+        key = "";
+      }
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("Dinheiro inicial" );
+    lcd.setCursor(0, 1);
+    lcd.print(dinheiroInicial);
+    delay(1500);
+    valorTela = "";
+    lcd.clear();
   }
 
+
 }
+
 
 //MENU DE SELÇÃO PARA QUANTIDADE DE JOGADORES
 void qtdJogadores() {
@@ -180,6 +250,7 @@ void qtdJogadores() {
 
     qtdDeJogadoresMenu.enabled = false;
     qtdDeJogadores =  tecla;
+    EEPROM.put(0, qtdDeJogadores);
     lcd.clear();
     txtEsperandoCartao.enabled = true;
 
@@ -246,7 +317,7 @@ String aproximaCartao() {
 
 
 //GRAVANDO NA EEPROM
-bool MEMORIA_ATUALIZADA = false;
+
 void salvaNaEEPROM() {
 
   for (int i = 0; i < qtdDeJogadores ; i++) {
@@ -318,11 +389,9 @@ struct opRealizada {
 
 opRealizada dadosDesfazer = {"", -1, -1, 0 };
 
-long value2 = 0;
-String valorTela = "";
+
 
 void calculadora() {
-  String teclaPress = "";
 
   receiver.resume();
   //leituraDoTeclado.enabled = true;
@@ -353,15 +422,13 @@ void calculadora() {
     opRetirar.enabled = true;
     iniciaCalculadora.enabled = false;
 
-  }
-  else if (key == '*' ) {
+  }  else if (key == '*' ) {
     // Define a operação
     valorTela = "";
     key = "";
     printListaJogadores();
 
-  }
-  else if (key == 'C' && value2 != 0) {
+  }  else if (key == 'C' && value2 != 0) {
     // Define a operação
     valorTela = "";
     key = "";
@@ -369,8 +436,7 @@ void calculadora() {
     opTransferir.enabled = true;
 
 
-  }
-  else if (key == 'D' && !valorTela.equals("")) {
+  }  else if (key == 'D' && !valorTela.equals("")) {
     key = "";
     lcd.setCursor(valorTela.length() - 1, 1);
     lcd.print(" ");
@@ -379,27 +445,20 @@ void calculadora() {
 
     value2 = valorTela.toInt();
 
-  }
-  else if (key == 'D' && valorTela.equals("") ) {
+  }  else if (key == 'D' && valorTela.equals("") ) {
     // Define a operação
     valorTela = "";
     key = "";
     value2 = 0;
-    //iniciaCalculadora.enabled = false;
 
     if (!dadosDesfazer.operador.equals("")) {
       operacaoDesfazer();
     }
-
-  }
-
-  else if (value2 == 0) {
+  } else if (value2 == 0) {
 
     lcd.setCursor(0, 0);
     lcd.print("Digite o valor:" );
-
   }
-
 }
 
 //OPERAÇÃO DE ADICIONAR DINHEIRO A CONTA
@@ -410,7 +469,6 @@ void operacaoAdicionar() {
 
   if (!cartao.equals("") && posicaoJogador != -1) {
 
-
     players[posicaoJogador].saldoConta += value2;
     mostraNovoSaldo(posicaoJogador);
 
@@ -418,11 +476,7 @@ void operacaoAdicionar() {
     opAdicionar.enabled = false;
     iniciaCalculadora.enabled = true;
     value2 = 0;
-
-
   }
-
-
 }
 
 //OPERAÇÃO DE RETIRAR DINHEIRO A CONTA
@@ -526,17 +580,13 @@ void mostraNovoSaldo(int posicaoJogador) {
   lcd.print("Saldo " + players[posicaoJogador].codCartao);
   lcd.setCursor(0, 1);
   lcd.print("R$ " + String(players[posicaoJogador].saldoConta));
-
   delay(2000);
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Concluido");
   delay(500);
-
   iniciaCalculadora.enabled = true;
-
 }
-
 
 //EXIBE UMA MENSAGEM NO LCD COM PARAMENTROS INFORMADOS
 void exibeLcd(int colunaLCD, int linhaLCD, String texto) {
@@ -544,5 +594,3 @@ void exibeLcd(int colunaLCD, int linhaLCD, String texto) {
   lcd.print(texto);
 
 }
-
-
