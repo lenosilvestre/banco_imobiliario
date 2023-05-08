@@ -40,17 +40,17 @@ LiquidCrystal lcd(rs, enable, d4, d5, d6, d7);
 
 ThreadController cpu;
 ThreadController sensores;
-//Thread leituraDoTeclado;
+
 Thread menuInicial;
 Thread qtdDeJogadoresMenu;
 Thread txtEsperandoCartao;
-Thread leituraDoControle; //depois mudar para RFID
+
 Thread iniciaCalculadora;
 Thread opAdicionar;
 Thread opRetirar;
 Thread opTransferir;
 // Variavel responsavel por armazenar o valor a ser exibido no LCD
-String valor = "";
+
 
 //String teclaPress = "";
 
@@ -106,11 +106,8 @@ void setup() {
   txtEsperandoCartao.onRun(esperandoCartao);
   txtEsperandoCartao.enabled = false;
 
-  leituraDoControle.setInterval(10);
-  leituraDoControle.onRun(controleRemoto);
-  leituraDoControle.enabled = false;
 
-  iniciaCalculadora.setInterval(99);
+  iniciaCalculadora.setInterval(10);
   iniciaCalculadora.onRun(calculadora);
   iniciaCalculadora.enabled = false;
 
@@ -131,13 +128,12 @@ void setup() {
   cpu.add(&menuInicial);
   cpu.add(&qtdDeJogadoresMenu);
   cpu.add(&txtEsperandoCartao);
-  cpu.add(&leituraDoControle);
 
   cpu.add(&iniciaCalculadora);
   cpu.add(&opAdicionar);
   cpu.add(&opRetirar);
   cpu.add(&opTransferir);
-  //  cpu.add(&leituraDoTeclado);
+
 
 }
 
@@ -205,7 +201,7 @@ void esperandoCartao() {
 
   if ( aux == qtdDeJogadores) { //Quantidade de cartões lida = a quantidade maxima de jogadores
 
-   // salvaNaEEPROM();
+    // salvaNaEEPROM();
 
     //calculadora();
     printListaJogadores();
@@ -215,9 +211,9 @@ void esperandoCartao() {
     iniciaCalculadora.enabled = true;
     txtEsperandoCartao.enabled = false;
   } else {
-    int cartao = aproximaCartao();
+    String cartao = aproximaCartao();
 
-    if (cartao != -1 && !jogadorAdicionado(cartao)) {
+    if (!cartao.equals("") && procuraJogador(cartao) == -1) {
 
       players[aux].codCartao = String(cartao); //codigo do cartão
       players[aux].num = aux + 1;
@@ -232,19 +228,18 @@ void esperandoCartao() {
 
 }
 
-int aproximaCartao() {
+String aproximaCartao() {
 
-  exibeLcd(0, 0, "Aproxime o ");
-  exibeLcd(0, 1, "cartao " + String(aux + 1));
-
+  exibeLcd(0, 0, "Aproxime cartao");
+  String vlControle = "";
   if (receiver.decode()) {
     //Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
-    int vlControle = receiver.decodedIRData.command;
+    vlControle = receiver.decodedIRData.command;
     receiver.resume();
     return  vlControle;
     // Receive the next value
   } else {
-    return -1;
+    return "";
   }
 
 }
@@ -279,14 +274,17 @@ void lendoEPRROM() {
   }
 }
 
-//Verifica se o cartão do jogador já foi adicionado na lista
-boolean jogadorAdicionado(int cartao) {
+
+//RETORNA A POSIÇÃO DO JOGADOR NA LISTA se já existe o jogador, retorna a posição
+int procuraJogador(String codCartao) {
   for (int i = 0 ; i < qtdDeJogadores ; i++) {
-    if (players[i].codCartao.equals(String(cartao))) {
-      return true;
+    if (players[i].codCartao.equals(codCartao)) {
+      return i;
     }
+
   }
-  return  false;
+  return -1;
+
 }
 
 //IMPRIME LISTA DE JOGADORES
@@ -325,8 +323,11 @@ String valorTela = "";
 
 void calculadora() {
   String teclaPress = "";
-  //leituraDoTeclado.enabled = true;
+
   receiver.resume();
+  //leituraDoTeclado.enabled = true;
+
+
   char key =  keypad.getKey();
 
   //ERRO AQUI NAO QUER VALIDAR A TECLA
@@ -340,17 +341,18 @@ void calculadora() {
   } else if (key == '+' && value2 != 0 ) {
     // Define a operação
     valorTela = "";
-    opAdicionar.enabled = true;
-
-    iniciaCalculadora.enabled = false;
     key = "";
+    opAdicionar.enabled = true;
+    iniciaCalculadora.enabled = false;
+
 
   } else if (key == '-'  && value2 != 0) {
     // Define a operação
+    key = "";
     valorTela = "";
     opRetirar.enabled = true;
     iniciaCalculadora.enabled = false;
-    key = "";
+
   }
   else if (key == '*' ) {
     // Define a operação
@@ -365,7 +367,7 @@ void calculadora() {
     key = "";
     iniciaCalculadora.enabled = false;
     opTransferir.enabled = true;
-    //operacaoTransferir();
+
 
   }
   else if (key == 'D' && !valorTela.equals("")) {
@@ -384,11 +386,14 @@ void calculadora() {
     key = "";
     value2 = 0;
     //iniciaCalculadora.enabled = false;
-    operacaoDesfazer();
+
+    if (!dadosDesfazer.operador.equals("")) {
+      operacaoDesfazer();
+    }
 
   }
 
-  else {
+  else if (value2 == 0) {
 
     lcd.setCursor(0, 0);
     lcd.print("Digite o valor:" );
@@ -399,57 +404,44 @@ void calculadora() {
 
 //OPERAÇÃO DE ADICIONAR DINHEIRO A CONTA
 void operacaoAdicionar() {
-
-  leituraDoControle.enabled = true;
-
   lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Aproxime cartao");
+  String cartao = aproximaCartao();
+  int posicaoJogador = procuraJogador(cartao);
 
-  if (!valor.equals("")) {
-    int posicaoJogador = procuraJogador();;
+  if (!cartao.equals("") && posicaoJogador != -1) {
 
-    if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
 
-      players[posicaoJogador].saldoConta += value2;
-      mostraNovoSaldo(posicaoJogador);
+    players[posicaoJogador].saldoConta += value2;
+    mostraNovoSaldo(posicaoJogador);
 
-      dadosDesfazer = {"+", posicaoJogador, -1, value2 };
-      value2 = 0;
+    dadosDesfazer = {"+", posicaoJogador, -1, value2 };
+    opAdicionar.enabled = false;
+    iniciaCalculadora.enabled = true;
+    value2 = 0;
 
-      opAdicionar.enabled = false;
 
-    }
   }
-
-
 
 
 }
 
 //OPERAÇÃO DE RETIRAR DINHEIRO A CONTA
 void operacaoRetirar() {
-  leituraDoControle.enabled = true;
 
   lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Aproxime cartao");
+  String cartao = aproximaCartao();
+  int posicaoJogador = procuraJogador(cartao);
 
-  if (!valor.equals("")) {
-    int posicaoJogador = procuraJogador();;
+  if (!cartao.equals("") && posicaoJogador != -1) {
 
-    if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
+    players[posicaoJogador].saldoConta -= value2;
+    mostraNovoSaldo(posicaoJogador);
 
-      players[posicaoJogador].saldoConta -= value2;
-      mostraNovoSaldo(posicaoJogador);
+    dadosDesfazer = {"-", posicaoJogador, -1, value2 };
+    value2 = 0;
+    opRetirar.enabled = false;
+    iniciaCalculadora.enabled = true;
 
-      dadosDesfazer = {"-", posicaoJogador, -1, value2 };
-      value2 = 0;
-      opRetirar.enabled = false;
-
-
-
-    }
   }
 
 }
@@ -459,84 +451,72 @@ byte jogadorCont = 0;
 
 void operacaoTransferir() {
 
-  leituraDoControle.enabled = true;
 
   lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Aproxime cartao");
+  String cartao = aproximaCartao();
   lcd.setCursor(0, 1);
   lcd.print(String(jogadorCont + 1) + "o Jogador");
 
+  int posicaoJogador = procuraJogador(cartao);
+
+  if (!cartao.equals("") && posicaoJogador != -1) {
+
+    if (jogadorCont == 0) {
+      players[posicaoJogador].saldoConta -= value2;
+      jogadorCont++;
+
+      dadosDesfazer.posJog1 = posicaoJogador;
+
+    } else if (jogadorCont == 1) {
+
+      players[posicaoJogador].saldoConta += value2;
+      mostraNovoSaldo(posicaoJogador);
+      dadosDesfazer.posJog2 = posicaoJogador;
+      dadosDesfazer.operador = "T";
+      dadosDesfazer.valorTransferido = value2;
+
+      value2 = 0;
+      jogadorCont = 0;
+      opTransferir.enabled = false;
+      iniciaCalculadora.enabled = true;
 
 
-  if (!valor.equals("")) {
-    int posicaoJogador = procuraJogador();;
-
-    if (posicaoJogador >= 0 && posicaoJogador <= qtdDeJogadores ) {
-      if (jogadorCont == 0) {
-        players[posicaoJogador].saldoConta -= value2;
-        jogadorCont++;
-
-        dadosDesfazer.posJog1 = posicaoJogador;
-
-      } else if (jogadorCont == 1) {
-
-        players[posicaoJogador].saldoConta += value2;
-        mostraNovoSaldo(posicaoJogador);
-        dadosDesfazer.posJog2 = posicaoJogador;
-        dadosDesfazer.operador = "T";
-        dadosDesfazer.valorTransferido = value2;
-
-        value2 = 0;
-        jogadorCont = 0;
-        opTransferir.enabled = false;
-        iniciaCalculadora.enabled = true;
-
-      }
     }
   }
 }
 //desfaz a ultima ação
-
-
-
 void operacaoDesfazer() {
-
 
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Desfazendo");
+  delay(1000);
 
 
-
-  if (!dadosDesfazer.operador.equals("")) {
-
-    int posicaoJogador = dadosDesfazer.posJog1;
+  int posicaoJogador = dadosDesfazer.posJog1;
 
 
-    if (dadosDesfazer.operador.equals("+")) {
-      players[posicaoJogador].saldoConta -= dadosDesfazer.valorTransferido;
-      mostraNovoSaldo(posicaoJogador);
-      dadosDesfazer = {"", -1, -1, 0 };
+  if (dadosDesfazer.operador.equals("+")) {
+    players[posicaoJogador].saldoConta -= dadosDesfazer.valorTransferido;
+    mostraNovoSaldo(posicaoJogador);
+    dadosDesfazer = {"", -1, -1, 0 };
 
-    }
-    else if (dadosDesfazer.operador.equals("-")) {
-      players[posicaoJogador].saldoConta += dadosDesfazer.valorTransferido;
-      mostraNovoSaldo(posicaoJogador);
-      dadosDesfazer = {"", -1, -1, 0 };
-
-    } else if (dadosDesfazer.operador.equals("T")) {
-      // Serial.print("pos "+String(dadosDesfazer.posJog1)+ "\nPOs2 "+String(dadosDesfazer.posJog2) +" valor "+String(dadosDesfazer.valorTransferido));
-      players[dadosDesfazer.posJog1].saldoConta += dadosDesfazer.valorTransferido;
-      players[dadosDesfazer.posJog2].saldoConta -= dadosDesfazer.valorTransferido;
-      mostraNovoSaldo(dadosDesfazer.posJog1);
-      dadosDesfazer = {"", -1, -1, 0 };
-
-    }
   }
-}
+  else if (dadosDesfazer.operador.equals("-")) {
+    players[posicaoJogador].saldoConta += dadosDesfazer.valorTransferido;
+    mostraNovoSaldo(posicaoJogador);
+    dadosDesfazer = {"", -1, -1, 0 };
 
-//exibe no serial
+  } else if (dadosDesfazer.operador.equals("T")) {
+    // Serial.print("pos "+String(dadosDesfazer.posJog1)+ "\nPOs2 "+String(dadosDesfazer.posJog2) +" valor "+String(dadosDesfazer.valorTransferido));
+    players[dadosDesfazer.posJog1].saldoConta += dadosDesfazer.valorTransferido;
+    players[dadosDesfazer.posJog2].saldoConta -= dadosDesfazer.valorTransferido;
+    mostraNovoSaldo(dadosDesfazer.posJog1);
+    dadosDesfazer = {"", -1, -1, 0 };
+
+  }
+
+}
 
 //EXIBE NO LCD O NOVO SALDO E SALVA NA EEPROM O NOVO SALDO
 void mostraNovoSaldo(int posicaoJogador) {
@@ -547,56 +527,16 @@ void mostraNovoSaldo(int posicaoJogador) {
   lcd.setCursor(0, 1);
   lcd.print("R$ " + String(players[posicaoJogador].saldoConta));
 
-
   delay(2000);
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Concluido");
   delay(500);
-  leituraDoControle.enabled = false;
+
   iniciaCalculadora.enabled = true;
 
 }
 
-
-//RETORNA A POSIÇÃO DO JOGADOR NA LISTA
-int procuraJogador() {
-
-  //controleRemoto();
-
-  for (int i = 0 ; i < qtdDeJogadores ; i++) {
-
-    if (players[i].codCartao.equals(valor)) {
-      // Serial.println("Encontrou");
-      valor = "";
-      return i;
-    }
-    //Serial.println("procurando...");
-  }
-
-  return -1;
-
-}
-
-
-//LEITURA DO TECLADO
-void teclado() {
-  char tecla = keypad.getKey();
-
-  if (tecla != NO_KEY) {
-
-
-    //     //  Serial.println(teclaPress);
-  }
-
-}
-
-//FUNÇÃO PARA APAGAR UM DIGITO
-void apagarCaractere() {
-  lcd.setCursor(valor.length() - 1, 1);
-  lcd.print(" ");
-  valor = valor.substring(0, valor.length() - 1);
-}
 
 //EXIBE UMA MENSAGEM NO LCD COM PARAMENTROS INFORMADOS
 void exibeLcd(int colunaLCD, int linhaLCD, String texto) {
@@ -605,15 +545,4 @@ void exibeLcd(int colunaLCD, int linhaLCD, String texto) {
 
 }
 
-//FUNÇÃO PARA LER O CONTROLE
-void controleRemoto() {
-  valor = "";
-  // Checks received an IR signal
-  if (receiver.decode()) {
-    //Serial.println(receiver.decodedIRData.command);     // imprime o HEX Code
-    valor = receiver.decodedIRData.command;
-    receiver.resume();  // Receive the next value
-  }
-
-}
 
