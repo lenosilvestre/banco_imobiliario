@@ -46,7 +46,7 @@ String valorTela = "";
 //variavel que armazena o valor da transação
 long value2 = 0;
 
-float dinheiroInicial = 100;
+long dinheiroInicial = 100;
 
 int qtdDeJogadores = 0;
 
@@ -204,6 +204,11 @@ void menuDeInicio() {
         lcd.print(valorTela);
         dinheiroInicial = valorTela.toInt();
         key = "";
+
+        if (valorTela.length() > 8) {
+          Serial.println(valorTela.length());
+          key = '+';
+        }
       }
     }
     lcd.setCursor(0, 0);
@@ -458,7 +463,7 @@ void calculadora() {
     lcd.setCursor(valorTela.length() - 1, 1);
     lcd.print(" ");
     valorTela = valorTela.substring(0, valorTela.length() - 1);
-    dadosDesfazer = { "", -1, -1, 0 };
+    // dadosDesfazer = { "", -1, -1, 0 };
 
     value2 = valorTela.toInt();
 
@@ -472,9 +477,18 @@ void calculadora() {
       operacaoDesfazer();
     }
 
-  }
+  } else if (valorTela.length() > 8) {
+  
+    lcd.setCursor(0, 0);
+    lcd.print("maximo   ");
+    lcd.setCursor(valorTela.length() - 1, 1);
+    lcd.print(" ");
+    valorTela = valorTela.substring(0, valorTela.length() - 1);
+    delay(1000);
+    lcd.setCursor(0, 0);
+    lcd.print("Digite o valor:");
 
-  else if (value2 == 0) {
+  } else if (value2 == 0) {
 
     lcd.setCursor(0, 0);
     lcd.print("Digite o valor:");
@@ -489,8 +503,8 @@ void operacaoAdicionar() {
 
   if (cartao != -1) {
     posicaoJogador = procuraJogador(cartao);
-    Serial.print("id ");
-    Serial.println(cartao);
+    //Serial.print("id ");
+    //Serial.println(cartao);
 
     delay(100);
   }
