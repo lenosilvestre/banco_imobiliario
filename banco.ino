@@ -62,8 +62,8 @@ struct nomeCartoes {
   String codCartao;
   String nomeFantasia;
 };
-struct nomeCartoes nomeCartao[3] = {
-  { "NULNUL", "NULNUL" }, { "a7848236", "bran" }, { "b9d0d693", "azul" }
+struct nomeCartoes nomeCartao[5] = {
+  { "NULNUL", "NULNUL" }, { "a7848236", "branco" }, { "b9d0d693", "azul" }, { "040a71b2dc4c81", "visa" }, { "040271b2dc4c81", "master" }
 };
 
 //ESTRUTURA COM OS VALORES DOS JOGADORES
@@ -267,8 +267,8 @@ void esperandoCartao() {
 
     if (cartaoCod != -1 && procuraJogador(cartaoCod) == -1) {
 
-     // players[aux].codCartao = nomeCartao[cartaoCod].nomeFantasia;  //codigo do cartão
-      players[aux].num = cartaoCod;                                 //Posição do nome fantasia no array
+      // players[aux].codCartao = nomeCartao[cartaoCod].nomeFantasia;  //codigo do cartão
+      players[aux].num = cartaoCod;  //Posição do nome fantasia no array
       players[aux].saldoConta = dinheiroInicial;
 
       lcd.clear();
@@ -352,15 +352,8 @@ void lendoEPRROM() {
 
       int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
       EEPROM.get(endereco, players[i]);
-      
+
       int id = players[i].num;
-      Serial.print("id -> ");
-      Serial.println(String(id));
-      Serial.print("nome -> ");
-      Serial.println(nomeCartao[id].nomeFantasia);
-     // Serial.println(nomeCartao[2].nomeFantasia);
-      //players[i].codCartao = nomeCartao[players[i].num].nomeFantasia;
-      //Serial.println(players[i].codCartao);
     }
     MEMORIA_ATUALIZADA = false;
   }
