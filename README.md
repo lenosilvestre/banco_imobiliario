@@ -10,6 +10,7 @@ A maquininha possui as seguintes funcionalidades:
 - Cálculo de transações financeiras (adicionar, retirar e transferir dinheiro)
 - Exibição do saldo dos jogadores em um display LCD
 - Interface com teclado matricial para inserção de valores
+- Armazena os jogadores e os saldos na memória EEPROM do Arduino
 
 ## Bibliotecas utilizadas
 
@@ -17,10 +18,8 @@ O projeto utiliza as seguintes bibliotecas do Arduino:
 
 - Keypad.h
 - LiquidCrystal.h
-- IRremote.h
-- Thread.h
-- ThreadController.h
 - EEPROM.h
+- MFRC522.h
 
 ## Como utilizar
 
