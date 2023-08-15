@@ -69,7 +69,6 @@ struct nomeCartoes nomeCartao[3] = {
 //ESTRUTURA COM OS VALORES DOS JOGADORES
 struct contaJogadores {
   int num;
-  String codCartao;
   float saldoConta;
 };
 
@@ -174,7 +173,8 @@ void menuDeInicio() {
       MEMORIA_ATUALIZADA = true;
       printListaJogadores();
       delay(500);
-      menuOp = 1;
+
+      menuOp = 3;
 
 
     } else {
@@ -195,7 +195,7 @@ void menuDeInicio() {
     lcd.clear();
     while (key != '+') {
       lcd.setCursor(0, 0);
-      lcd.print("Digite o valor:");
+      lcd.print("valor inicio:");
       key = keypad.getKey();
       if (key >= '0' && key <= '9') {
 
@@ -267,13 +267,13 @@ void esperandoCartao() {
 
     if (cartaoCod != -1 && procuraJogador(cartaoCod) == -1) {
 
-      players[aux].codCartao = nomeCartao[cartaoCod].nomeFantasia;  //codigo do cartão
+     // players[aux].codCartao = nomeCartao[cartaoCod].nomeFantasia;  //codigo do cartão
       players[aux].num = cartaoCod;                                 //Posição do nome fantasia no array
       players[aux].saldoConta = dinheiroInicial;
 
       lcd.clear();
 
-      lcd.print(players[aux].codCartao);
+      lcd.print(nomeCartao[cartaoCod].nomeFantasia);
       lcd.setCursor(0, 1);
       lcd.print("R$ " + String(players[aux].saldoConta));
       delay(1500);
@@ -352,9 +352,14 @@ void lendoEPRROM() {
 
       int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
       EEPROM.get(endereco, players[i]);
-      // Serial.print("id -> ");
-      //Serial.println(String(players[i].num));
-      players[i].codCartao = nomeCartao[players[i].num].nomeFantasia;
+      
+      int id = players[i].num;
+      Serial.print("id -> ");
+      Serial.println(String(id));
+      Serial.print("nome -> ");
+      Serial.println(nomeCartao[id].nomeFantasia);
+     // Serial.println(nomeCartao[2].nomeFantasia);
+      //players[i].codCartao = nomeCartao[players[i].num].nomeFantasia;
       //Serial.println(players[i].codCartao);
     }
     MEMORIA_ATUALIZADA = false;
@@ -388,7 +393,7 @@ void printListaJogadores() {
     lcd.setCursor(2, 0);
     lcd.print("->");
     lcd.setCursor(5, 0);
-    lcd.print(players[i].codCartao);
+    lcd.print(nomeCartao[players[i].num].nomeFantasia);
     lcd.setCursor(0, 1);
     lcd.print("R$ ");
     lcd.setCursor(3, 1);
@@ -543,7 +548,7 @@ int jogadorCont = 0;
 
 
 void operacaoTransferir() {
-  
+
 
   int cartao = -1;
   cartao = aproximaCartao();
@@ -614,7 +619,7 @@ void mostraNovoSaldo(int posicaoJogador) {
   salvaNaEEPROM();
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(players[posicaoJogador].codCartao);
+  lcd.print(nomeCartao[players[posicaoJogador].num].nomeFantasia);
   lcd.setCursor(0, 1);
   lcd.print(String(players[posicaoJogador].saldoConta));
   delay(1000);
