@@ -40,7 +40,7 @@ Para utilizar a maquininha de cartões no jogo de tabuleiro Banco Imobiliário, 
 
 ## Simulador WOKWI
 
-[WOKWI]([http://exemplo.com/](https://wokwi.com/projects/372779675952274433))
+[WOKWI Simulador](https://wokwi.com/projects/372779675952274433)
 
 ## Contribuições
 
