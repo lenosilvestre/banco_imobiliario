@@ -6,11 +6,22 @@
 #include <Wire.h>
 #include <SPI.h>
 
+//=================VARIAVEIS IMPORTANTES======================
+
+boolean teste = true; //TESTE EM SIMULADOR (ativa/desativa)
+
+long dinheiroInicial = 100; //Dinheiro inicial
+
+int tempoDeTela = 1000; //Duração das mensagens na tela em ms
+
+const int qtdMaximaDeJogadores = 4;  //define o maximo de jogadores
+//==============================================================
+
+
 //DEFINIÇÃO DOS PINO RFID <<<<<<<<<<
 const byte SS_PIN = 10;
 const byte RST_PIN = 9;
 MFRC522 mfrc522(SS_PIN, RST_PIN);
-
 
 // Definição dos pinos utilizados para o teclado matricial
 const byte linhas = 4;
@@ -34,13 +45,7 @@ String valorTela = "";
 //variavel que armazena o valor da transação
 long value2 = 0;
 
-long dinheiroInicial = 100;
-
 int qtdDeJogadores = 0;
-
-int tempoDeTela = 1000; //ms
-
-const int qtdMaximaDeJogadores = 6;  //define o maximo de jogadores
 
 int EEPROM_endereco = 10;
 
@@ -79,6 +84,17 @@ byte aAcentuado[8] = {
   B00000
 };
 
+byte customChar[] = {
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111
+};
+
 void setup() {
 
   SPI.begin();
@@ -90,7 +106,9 @@ void setup() {
   lcd.backlight();                // Serve para ligar a luz do display
   lcd.createChar(1, aAcentuado);  //caractere especial 'á'
 
-  Serial.begin(9600);
+  lcd.createChar(0, customChar);
+  telaDeCarregamento();
+
 }
 int menuOp = 0;
 
@@ -260,13 +278,23 @@ void esperandoCartao() {
     }
   }
 }
-int teste = 1 ;
-
+int auxTeste = 0 ;
 int aproximaCartao() {
 
   exibeLcd(0, 0, "Aproxime cartao");
 
- 
+  //Teste no simulador
+
+  if (teste) {
+    if (auxTeste < qtdMaximaDeJogadores) {
+      return auxTeste++;
+    }
+    else {
+      return auxTeste = 0;
+    }
+
+  } else {
+
     // Verifica se há uma nova tag RFID presente
     if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
       // Lê o ID da tag mfrc522
@@ -285,20 +313,8 @@ int aproximaCartao() {
       }
     }
     return -1;
-  
-  /* //Teste no simulador
 
-  if (teste == 1) {
-    teste++;
-    return 1;
-  } if (teste == 2) {
-    teste++;
-    return 2;
   }
-   if (teste == 3) {
-    teste = 1;
-    return 3;
-  } */
 
 }
 
@@ -336,20 +352,12 @@ void lendoEPRROM() {
 
 //IMPRIME LISTA DE JOGADORES
 void printListaJogadores() {
-  // Serial.println("LISTA DE JOGADORES");
   lendoEPRROM();
-  //Serial.println(qtdDeJogadores);
   delay(50);
   lcd.clear();
 
   for (int i = 0; i < qtdDeJogadores; i++) {
-  /*    Serial.print(" Ordem ");
-      Serial.print(String(players[i].id));
-      Serial.print(" Nome: ");
-      Serial.print(nomeCartao[players[i].id].nomeFantasia );
-      Serial.print(" -> saldo: R$ ");
-      Serial.println( String(players[i].saldoConta));
-    */
+
     lcd.setCursor(0, 0);
     lcd.print(String(i + 1));
     lcd.setCursor(2, 0);
@@ -366,17 +374,16 @@ void printListaJogadores() {
   lcd.clear();
 }
 
-//CALCULADORA
+//Dados para gravados para poder desfazer a ultima operação
 struct opRealizada {
   String operador;
   int posJog1;
   int posJog2;
   long valorTransferido;
 };
-
-//Dados para gravados para poder desfazer a ultima operação
 opRealizada dadosDesfazer = { "", -1, -1, 0 };
 
+//CALCULADORA
 //Função responsavel por receber os valores e definir as operaçoes da maquina via teclado
 void calculadora() {
 
@@ -412,6 +419,7 @@ void calculadora() {
     valorTela = "";
     key = "";
     printListaJogadores();
+    value2 = 0;
     menuOp = 3;
 
   } else if (key == 'C' && value2 != 0) {
@@ -478,8 +486,7 @@ void operacaoAdicionar() {
 //OPERAÇÃO DE RETIRAR DINHEIRO A CONTA
 void operacaoRetirar() {
 
-  int cartao = -1;
-  cartao = aproximaCartao();
+  int cartao = aproximaCartao();
 
   int posicaoJogador = procuraJogador(cartao);
 
@@ -510,8 +517,7 @@ int jogadorCont = 0;
 
 void operacaoTransferir() {
 
-  int cartao = -1;
-  cartao = aproximaCartao();
+  int cartao = aproximaCartao();
 
   lcd.setCursor(0, 1);
   lcd.print(String(jogadorCont + 1) + "o Jogador");
@@ -522,12 +528,21 @@ void operacaoTransferir() {
 
     if (jogadorCont == 0) {
 
-      players[posicaoJogador].saldoConta -= value2;
-      jogadorCont++;
+      if (players[posicaoJogador].saldoConta >= value2) {
+        players[posicaoJogador].saldoConta -= value2;
+        jogadorCont++;
 
-      dadosDesfazer.posJog1 = posicaoJogador;
-      operacaoTransferir();
-
+        dadosDesfazer.posJog1 = posicaoJogador;
+        operacaoTransferir();
+      } else {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Saldo insuficiente");
+        value2 = 0;
+        delay(tempoDeTela);
+        mostraNovoSaldo(posicaoJogador);
+        menuOp = 3;
+      }
     } else if (jogadorCont == 1 && dadosDesfazer.posJog1 != posicaoJogador) {
 
       players[posicaoJogador].saldoConta += value2;
@@ -597,4 +612,30 @@ void exibeLcd(int colunaLCD, int linhaLCD, String texto) {
     lcd.print(texto);
     textoEmTela = texto;
   }
+}
+
+void telaDeCarregamento(){
+    lcd.home();
+
+  for (int i = 0 ; i < 2; i++) {
+    lcd.setCursor(0, i);
+    for (int j = 0 ; j < 16; j++) {
+      lcd.write(0);
+      delay(50);
+    }
+  } 
+
+   lcd.rightToLeft();
+  for (int i = 1 ; i >=0; i--) {
+
+    for (int j = 0; j <=16; j++) {
+      lcd.print(' ');
+      delay(20);
+    }
+    lcd.setCursor(16, 0);
+  }
+ 
+
+
+lcd.clear();
 }
