@@ -38,6 +38,10 @@ Para utilizar a maquininha de cartões no jogo de tabuleiro Banco Imobiliário, 
 - A maquininha suporta até 6 jogadores.
 - A memória EEPROM do Arduino tem uma capacidade limitada e pode se esgotar após muitos jogos.
 
+## Simulador WOKWI
+
+[WOKWI]([http://exemplo.com/](https://wokwi.com/projects/372779675952274433))
+
 ## Contribuições
 
 Contribuições para o projeto são sempre bem-vindas. Caso encontre algum problema ou tenha alguma sugestão de melhoria, fique à vontade para criar uma issue ou submeter um pull request.
