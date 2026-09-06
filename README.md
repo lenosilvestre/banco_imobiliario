@@ -1,53 +1,104 @@
 # Maquininha de Cartões para o jogo de tabuleiro Banco Imobiliário
 
-Este é um projeto de maquininha de cartões utilizando Arduino para ser utilizado no jogo de tabuleiro Banco Imobiliário. O objetivo do projeto é oferecer uma forma de gerenciar as transações financeiras dos jogadores, tornando o jogo mais prático e divertido.
+Projeto de maquininha de cartões com Arduino para gerenciar transações financeiras no jogo de tabuleiro Banco Imobiliário. Cada jogador possui um cartão RFID vinculado à sua conta virtual.
 
 ## Funcionalidades
 
-A maquininha possui as seguintes funcionalidades:
+- Leitura de cartões RFID para identificar jogadores (até 6)
+- Cadastro automático de cartões RFID desconhecidos
+- Operações financeiras: adicionar, retirar e transferir dinheiro
+- Atalho de salário ao passar pelo ponto de partida
+- Confirmação antes de executar transações
+- Desfazer última operação
+- Exibição de saldos no display LCD I2C
+- Interface com teclado matricial 4×4
+- Persistência na EEPROM com checksum e validação
+- Histórico das últimas 10 transações
+- Continuar jogo salvo ou iniciar novo
+- Reset de dados salvos
 
-- Leitura de cartões RFID para identificar os jogadores
-- Cálculo de transações financeiras (adicionar, retirar e transferir dinheiro)
-- Exibição do saldo dos jogadores em um display LCD
-- Interface com teclado matricial para inserção de valores
-- Armazena os jogadores e os saldos na memória EEPROM do Arduino
+## Hardware
 
-## Bibliotecas utilizadas
+| Componente | Detalhes |
+|---|---|
+| Arduino Uno/Nano | Microcontrolador |
+| MFRC522 | Leitor RFID (SS=10, RST=9) |
+| LCD I2C 16×2 | Endereço 0x27 |
+| Teclado 4×4 | Linhas: 2,3,4,5 — Colunas: A0–A3 |
 
-O projeto utiliza as seguintes bibliotecas do Arduino:
+## Bibliotecas
 
 - Keypad.h
-- LiquidCrystal.h
+- LiquidCrystal_I2C.h
 - EEPROM.h
 - MFRC522.h
+- SPI.h
+- Wire.h
 
-## Como utilizar
+## Estrutura do código
 
-Para utilizar a maquininha de cartões no jogo de tabuleiro Banco Imobiliário, siga os passos abaixo:
+```
+Codigo/
+├── banco.ino    # Firmware principal
+├── config.h     # Constantes e estruturas
+├── storage.h    # EEPROM, cartões e histórico
+└── utils.h      # Utilitários de string e timer
+```
 
-1. Conecte o Arduino ao computador e carregue o código da maquininha.
-2. Conecte o leitor RFID ao Arduino e certifique-se de que ele está funcionando corretamente.
-3. Conecte o display LCD ao Arduino e certifique-se de que ele está funcionando corretamente.
-4. Conecte o teclado matricial ao Arduino e certifique-se de que ele está funcionando corretamente.
-5. Inicie o jogo e solicite que cada jogador passe seu cartão RFID na maquininha para que seu saldo seja cadastrado.
-6. Durante o jogo, utilize a maquininha para realizar as transações financeiras necessárias (adicionar, retirar e transferir dinheiro).
-7. Ao final do jogo, a lista de jogadores e seus respectivos saldos será armazenada na memória EEPROM do Arduino para ser utilizada em jogos futuros.
+## Teclado
 
-## Limitações
+| Tecla | Função |
+|---|---|
+| 0–9 | Digitar valor |
+| + | Adicionar dinheiro |
+| − | Retirar dinheiro |
+| C | Transferir dinheiro |
+| * | Listar saldos |
+| # | Salário (tela vazia) / Confirmar |
+| D | Apagar dígito / Desfazer operação |
 
-- A maquininha suporta até 6 jogadores.
-- A memória EEPROM do Arduino tem uma capacidade limitada e pode se esgotar após muitos jogos.
+### Menu inicial
 
-## Simulador WOKWI
+| Tecla | Função |
+|---|---|
+| 1 | Novo jogo |
+| 2 | Continuar jogo salvo |
+| # | Configurar dinheiro inicial |
+| * | Configurar valor do salário |
+| D | Apagar dados salvos |
+
+## Valores padrão
+
+- Dinheiro inicial: **R$ 400**
+- Salário ao passar pelo início: **R$ 200**
+- Máximo de jogadores: **6**
+
+## Simulador Wokwi
 
 [WOKWI Simulador](https://wokwi.com/projects/372779675952274433)
 
-## Contribuições
+Para testar no simulador, altere em `config.h`:
 
-Contribuições para o projeto são sempre bem-vindas. Caso encontre algum problema ou tenha alguma sugestão de melhoria, fique à vontade para criar uma issue ou submeter um pull request.
+```cpp
+const bool MODO_SIMULADOR = true;
+```
+
+## Como utilizar
+
+1. Carregue o código no Arduino e conecte os componentes.
+2. No menu inicial, escolha **1** para novo jogo ou **2** para continuar.
+3. Selecione a quantidade de jogadores (2 a 6).
+4. Cada jogador aproxima seu cartão RFID para cadastro.
+5. Durante o jogo, digite o valor e escolha a operação (+, −, C).
+6. Confirme com **#** e aproxime o cartão do jogador.
+7. Para salário ao passar pelo início, pressione **#** com a tela vazia.
+
+## Limitações
+
+- Máximo de 6 jogadores e 10 cartões cadastrados
+- Memória EEPROM limitada (dados persistem entre sessões)
+- Desfazer apenas a última operação
 
 ## Licença
 
 Este projeto é distribuído sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
-
-(Readme criado pelo Chat GPT3)

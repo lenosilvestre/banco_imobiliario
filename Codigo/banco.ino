@@ -1,324 +1,250 @@
 #include <Keypad.h>
 #include <LiquidCrystal_I2C.h>
-#include <EEPROM.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Wire.h>
-#include <SPI.h>
 
-//=================VARIAVEIS IMPORTANTES======================
+#include "config.h"
+#include "utils.h"
+#include "storage.h"
 
-boolean teste = true; //TESTE EM SIMULADOR (ativa/desativa)
-
-long dinheiroInicial = 100; //Dinheiro inicial
-
-int tempoDeTela = 1000; //Duração das mensagens na tela em ms
-
-const int qtdMaximaDeJogadores = 4;  //define o maximo de jogadores
-//==============================================================
-
-
-//DEFINIÇÃO DOS PINO RFID <<<<<<<<<<
-const byte SS_PIN = 10;
-const byte RST_PIN = 9;
+// Hardware
 MFRC522 mfrc522(SS_PIN, RST_PIN);
-
-// Definição dos pinos utilizados para o teclado matricial
-const byte linhas = 4;
-const byte colunas = 4;
 byte linhaPinos[] = { 2, 3, 4, 5 };
 byte colunaPinos[] = { A0, A1, A2, A3 };
-
-// caracteres que representa as teclas do teclado matricial
 char teclas[] = { '1', '2', '3', '+', '4', '5', '6', '-', '7', '8', '9', 'C', '*', '0', '#', 'D' };
-// Criação do objeto Keypad
-Keypad keypad = Keypad(makeKeymap(teclas), linhaPinos, colunaPinos, linhas, colunas);
+Keypad keypad = Keypad(makeKeymap(teclas), linhaPinos, colunaPinos, LINHAS_TECLADO, COLUNAS_TECLADO);
+LiquidCrystal_I2C lcd(ENDERECO_I2C, 16, 2);
 
-// Definição dos pinos utilizados para o display LCD
-// Criação do objeto LiquidCrystal para ser usada com o I2C
-#define enderecoI2C 0x27  // Serve para definir o endereço do display.
+// Estado global
+ContaJogador players[QTD_MAXIMA_JOGADORES];
+CartaoInfo cartoes[QTD_MAXIMA_CARTOES];
+HistoricoEntry historico[HISTORICO_TAMANHO];
 
-LiquidCrystal_I2C lcd(enderecoI2C, 16, 2);
-
-// Variavel responsavel por armazenar o valor a ser exibido no LCD
-String valorTela = "";
-//variavel que armazena o valor da transação
-long value2 = 0;
-
+int qtdCartoesCadastrados = 0;
 int qtdDeJogadores = 0;
+long dinheiroInicial = DINHEIRO_INICIAL_PADRAO;
+long salarioPassagem = SALARIO_PASSAGEM_PADRAO;
+int historicoIndice = 0;
 
-int EEPROM_endereco = 10;
+MenuEstado menuOp = MENU_INICIO;
+OperacaoPendente operacaoPendente = OP_NENHUMA;
+OpRealizada dadosDesfazer = { '\0', -1, -1, 0 };
 
-bool MEMORIA_ATUALIZADA = false;  //verificador se houve atualização na lista de jogadores
+char valorTela[MAX_DIGITOS_VALOR + 1] = "";
+long valorTransacao = 0;
 
-//NOMEIA OS CARTÃO PARA FACILITAR A INDENTIFICAÇÃO DO USUARIO
-struct nomeCartoes {
-  String codCartao;
-  String nomeFantasia;
+MenuEstado menuRetornoMsg = MENU_INICIO;
+
+int indiceCadastroCartao = 0;
+bool aguardandoExibicaoCadastro = false;
+int indiceListaJogadores = 0;
+int8_t transferenciaOrigem = -1;
+int auxSimulador = 1;
+
+Timer timerMensagem;
+Timer timerInatividade;
+char mensagemTemporaria[17] = "";
+char textoEmTela[17] = "";
+
+byte charAAcentuado[8] = {
+  B00001, B00010, B01111, B00001, B01111, B10001, B01111, B00000
 };
-struct nomeCartoes nomeCartao[5] = {
-  { "NULNUL", "NULNUL" }, { "a7848236", "branco" }, { "b9d0d693", "azul" }, { "040a71b2dc4c81", "visa" }, { "040271b2dc4c81", "master" }
-};
-
-//ESTRUTURA COM OS VALORES DOS JOGADORES
-struct contaJogadores {
-  int id;
-  float saldoConta;
-};
-
-//VARIAVEL QUE ARMAZENA OS JOGADORES DENTRO DE UM ARRAY
-struct contaJogadores players[qtdMaximaDeJogadores];
-
-//VARIAVEL QUE ARMAZENA OS VALORES DE TESTE
-struct contaJogadores plTeste[qtdMaximaDeJogadores];
-
-//CARACTERE ESPECIAL 'á'
-byte aAcentuado[8] = {
-  B00001,
-  B00010,
-  B01111,
-  B00001,
-  B01111,
-  B10001,
-  B01111,
-  B00000
+byte charBloco[8] = {
+  B11111, B11111, B11111, B11111, B11111, B11111, B11111, B11111
 };
 
-byte customChar[] = {
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111
-};
+// Prototipos
+void menuDeInicio();
+void menuQtdJogadores();
+void menuEsperandoCartao();
+void menuCalculadora();
+void menuAdicionar();
+void menuRetirar();
+void menuTransferirOrigem();
+void menuTransferirDestino();
+void menuConfirmacao();
+void menuConfigDinheiro();
+void menuConfigSalario();
+void menuResetConfirm();
+void menuSalario();
+void menuMsgTemporaria();
+void menuListaJogadores();
+
+void resetarEstadoNovoJogo();
+void exibirMensagemTemporaria(const char* msg, unsigned long ms, MenuEstado retorno);
+void exibeLcd(int col, int lin, const char* texto);
+void mostraNovoSaldo(int posicao);
+void operacaoDesfazer();
+void telaDeCarregamento();
+int aproximaCartao();
+int procuraJogador(int codCartao);
+int procuraCartaoPorUid(const char* uid);
+void mostrarErroCartao();
+void limparOperacaoPendente();
+void registrarOperacaoDesfazer(char op, int8_t j1, int8_t j2, long valor);
+void atualizarAtividade();
 
 void setup() {
+  Serial.begin(9600);
 
   SPI.begin();
-  //Inicialia RFID
   mfrc522.PCD_Init();
 
-  // Inicializa o display LCD com 16 colunas e 2 linhas
-  lcd.init();                     // Serve para iniciar a comunicação com o display já conectado
-  lcd.backlight();                // Serve para ligar a luz do display
-  lcd.createChar(1, aAcentuado);  //caractere especial 'á'
+  lcd.init();
+  lcd.backlight();
+  lcd.createChar(1, charAAcentuado);
+  lcd.createChar(0, charBloco);
 
-  lcd.createChar(0, customChar);
+  inicializarCartoesPadrao();
+  limparJogadores();
+
   telaDeCarregamento();
-
+  exibeLcd(0, 0, "Banco Imob.");
+  timerInatividade.iniciar(TIMEOUT_INATIVIDADE_MS);
 }
-int menuOp = 0;
 
 void loop() {
+  if (timerInatividade.expirou()) {
+    menuOp = MENU_INICIO;
+    timerInatividade.iniciar(TIMEOUT_INATIVIDADE_MS);
+    lcd.clear();
+  }
+
+  if (menuOp == MENU_MSG_TEMPORARIA) {
+    menuMsgTemporaria();
+    return;
+  }
 
   switch (menuOp) {
-    case 0:
-      menuDeInicio();
-      break;
-    case 1:
-      qtdJogadores();
-      break;
-    case 2:
-      esperandoCartao();
-      break;
-    case 3:
-      calculadora();
-      break;
-    case 4:
-      operacaoAdicionar();
-      break;
-    case 5:
-      operacaoRetirar();
-      break;
-    case 6:
-      operacaoTransferir();
-      break;
+    case MENU_INICIO: menuDeInicio(); break;
+    case MENU_QTD_JOGADORES: menuQtdJogadores(); break;
+    case MENU_ESPERANDO_CARTAO: menuEsperandoCartao(); break;
+    case MENU_CALCULADORA: menuCalculadora(); break;
+    case MENU_ADICIONAR: menuAdicionar(); break;
+    case MENU_RETIRAR: menuRetirar(); break;
+    case MENU_TRANSFERIR_ORIGEM: menuTransferirOrigem(); break;
+    case MENU_TRANSFERIR_DESTINO: menuTransferirDestino(); break;
+    case MENU_CONFIRMACAO: menuConfirmacao(); break;
+    case MENU_CONFIG_DINHEIRO: menuConfigDinheiro(); break;
+    case MENU_CONFIG_SALARIO: menuConfigSalario(); break;
+    case MENU_RESET_CONFIRM: menuResetConfirm(); break;
+    case MENU_SALARIO: menuSalario(); break;
+    case MENU_LISTA_JOGADORES: menuListaJogadores(); break;
+    default: menuOp = MENU_INICIO; break;
   }
 }
 
-//MENU INICIAL
-void menuDeInicio() {
+void atualizarAtividade() {
+  timerInatividade.iniciar(TIMEOUT_INATIVIDADE_MS);
+}
 
-  lcd.setCursor(0, 0);
-  lcd.print("Novo jogo?");
-  lcd.setCursor(0, 1);
-  lcd.print("1-Sim  2-Nao");
-  char tecla = keypad.getKey();
+void resetarEstadoNovoJogo() {
+  indiceCadastroCartao = 0;
+  aguardandoExibicaoCadastro = false;
+  auxSimulador = 1;
+  transferenciaOrigem = -1;
+  limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+  valorTransacao = 0;
+  limparOperacaoPendente();
+  limparJogadores();
+}
 
-  if (tecla == '1') {
+void limparOperacaoPendente() {
+  operacaoPendente = OP_NENHUMA;
+  valorTransacao = 0;
+  limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+}
 
-    lcd.clear();
-    exibeLcd(0, 0, "Vamos jogar...");
-    delay(tempoDeTela);
-    lcd.clear();
-    menuOp = 1;
+void registrarOperacaoDesfazer(char op, int8_t j1, int8_t j2, long valor) {
+  dadosDesfazer.operador = op;
+  dadosDesfazer.posJog1 = j1;
+  dadosDesfazer.posJog2 = j2;
+  dadosDesfazer.valor = valor;
+}
 
-  } else if (tecla == '2') {
+void exibirMensagemTemporaria(const char* msg, unsigned long ms, MenuEstado retorno) {
+  copiarString(mensagemTemporaria, 17, msg);
+  lcd.clear();
+  lcd.print(mensagemTemporaria);
+  timerMensagem.iniciar(ms);
+  menuRetornoMsg = retorno;
+  menuOp = MENU_MSG_TEMPORARIA;
+}
 
-    EEPROM.get(0, qtdDeJogadores);
-
-    if (qtdDeJogadores > 1) {
-      lcd.clear();
-      exibeLcd(0, 0, "Continuando...");
-      delay(tempoDeTela);
-      MEMORIA_ATUALIZADA = true;
-      printListaJogadores();
-      delay(tempoDeTela);
-      menuOp = 3;
-
-    } else {
-
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("nao h");
-      lcd.write(1);  //caractere especial 'á'
-      lcd.print(" jogos");
-      lcd.setCursor(0, 1);
-      lcd.print("salvos");
-      delay(tempoDeTela);
+void menuMsgTemporaria() {
+  if (timerMensagem.expirou()) {
+    timerMensagem.parar();
+    if (mensagemTemporaria[0] != '\0') {
       lcd.clear();
     }
-
-  } else if (tecla == '#') {
-    char key = keypad.getKey();
-    lcd.clear();
-    while (key != '+') {
-      lcd.setCursor(0, 0);
-      lcd.print("valor inicio:");
-      key = keypad.getKey();
-      if (key >= '0' && key <= '9') {
-
-        valorTela += key;
-        lcd.setCursor(0, 1);
-        lcd.print(valorTela);
-        dinheiroInicial = valorTela.toInt();
-        key = "";
-
-        if (valorTela.length() > 8) {
-          Serial.println(valorTela.length());
-          key = '+';
-        }
-      }
-    }
-    lcd.setCursor(0, 0);
-    lcd.print("Dinheiro inicial");
-    lcd.setCursor(0, 1);
-    lcd.print(dinheiroInicial);
-    delay(tempoDeTela);
-    valorTela = "";
-    lcd.clear();
+    limparBuffer(textoEmTela, 17);
+    limparBuffer(mensagemTemporaria, 17);
+    menuOp = menuRetornoMsg;
   }
 }
 
-//MENU DE SELÇÃO PARA QUANTIDADE DE JOGADORES
-void qtdJogadores() {
-  lcd.setCursor(0, 0);
-  lcd.print("Qtd de jogadores");
-  lcd.setCursor(0, 1);
-  lcd.print("de 2 a ");
-  lcd.print(qtdMaximaDeJogadores);
-
-  int tecla = keypad.getKey() - '0';
-
-  if (tecla > 1 && tecla <= qtdMaximaDeJogadores) {
-
-    qtdDeJogadores = tecla;
-    EEPROM.put(0, qtdDeJogadores);
+void exibeLcd(int col, int lin, const char* texto) {
+  if (!stringsIguais(textoEmTela, texto)) {
     lcd.clear();
-    menuOp = 2;
-
-  } else if (tecla > qtdMaximaDeJogadores) {
-    lcd.clear();
-
-    lcd.print("Selecione de 2 a ");
-    lcd.setCursor(0, 1);
-    lcd.print(qtdMaximaDeJogadores);
-
-    lcd.print(" jogadores");
-    delay(tempoDeTela);
-    lcd.clear();
+    lcd.setCursor(col, lin);
+    lcd.print(texto);
+    copiarString(textoEmTela, 17, texto);
   }
 }
 
-int aux = 0;
-//MENU QUE ADICIONA O CARTAO PARA CADA JOGADOR A LISTA []
-void esperandoCartao() {
+void mostrarErroCartao() {
+  exibirMensagemTemporaria("Cartao invalido", TEMPO_TELA_MS, MENU_CALCULADORA);
+}
 
-  if (aux == qtdDeJogadores) {  //Quantidade de cartões lida = a quantidade maxima de jogadores
-
-    salvaNaEEPROM();
-
-    printListaJogadores();
-    lcd.clear();
-    menuOp = 3;
-
-  } else {
-
-
-    int cartaoCod = aproximaCartao();
-
-
-    if (cartaoCod != -1 && procuraJogador(cartaoCod) == -1) {
-
-      // players[aux].codCartao = nomeCartao[cartaoCod].nomeFantasia;  //codigo do cartão
-      players[aux].id = cartaoCod;  //Posição do nome fantasia no array
-      players[aux].saldoConta = dinheiroInicial;
-
-      lcd.clear();
-
-      lcd.print(nomeCartao[cartaoCod].nomeFantasia);
-      lcd.setCursor(0, 1);
-      lcd.print("R$ " + String(players[aux].saldoConta));
-      delay(tempoDeTela);
-      exibeLcd(0, 0, "Aproxime cartao ");
-      aux++;
+int procuraCartaoPorUid(const char* uid) {
+  for (int i = 1; i < qtdCartoesCadastrados; i++) {
+    if (stringsIguais(cartoes[i].codCartao, uid)) {
+      return i;
     }
   }
+  return -1;
 }
-int auxTeste = 0 ;
+
 int aproximaCartao() {
-
   exibeLcd(0, 0, "Aproxime cartao");
 
-  //Teste no simulador
-
-  if (teste) {
-    if (auxTeste < qtdMaximaDeJogadores) {
-      return auxTeste++;
+  if (MODO_SIMULADOR) {
+    if (auxSimulador < qtdCartoesCadastrados) {
+      return auxSimulador++;
     }
-    else {
-      return auxTeste = 0;
-    }
-
-  } else {
-
-    // Verifica se há uma nova tag RFID presente
-    if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
-      // Lê o ID da tag mfrc522
-      String tagID = "";
-      for (byte i = 0; i < mfrc522.uid.size; i++) {
-        tagID.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? "0" : ""));
-        tagID.concat(String(mfrc522.uid.uidByte[i], HEX));
-      }
-
-      mfrc522.PICC_HaltA();  // Pára a leitura da tag atual
-
-      for (int i = 0; i < sizeof(nomeCartao) / sizeof(nomeCartao[0]); i++) {
-        if (nomeCartao[i].codCartao.equals(tagID)) {
-          return i;
-        }
-      }
-    }
-    return -1;
-
+    auxSimulador = 1;
+    return 1;
   }
 
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
+    return -1;
+  }
+
+  char tagID[18];
+  limparBuffer(tagID, 18);
+  int pos = 0;
+  for (byte i = 0; i < mfrc522.uid.size && pos < 17; i++) {
+    if (mfrc522.uid.uidByte[i] < 0x10 && pos < 16) {
+      tagID[pos++] = '0';
+    }
+    byte high = (mfrc522.uid.uidByte[i] >> 4) & 0x0F;
+    byte low = mfrc522.uid.uidByte[i] & 0x0F;
+    tagID[pos++] = high < 10 ? ('0' + high) : ('a' + high - 10);
+    tagID[pos++] = low < 10 ? ('0' + low) : ('a' + low - 10);
+  }
+  tagID[pos] = '\0';
+
+  mfrc522.PICC_HaltA();
+
+  int idx = procuraCartaoPorUid(tagID);
+  if (idx != -1) {
+    return idx;
+  }
+
+  return cadastrarCartaoDinamico(tagID);
 }
 
-//RETORNA A POSIÇÃO DO JOGADOR NA LISTA se já existe o jogador, retorna a posição
 int procuraJogador(int codCartao) {
   for (int i = 0; i < qtdDeJogadores; i++) {
     if (players[i].id == codCartao) {
@@ -328,314 +254,438 @@ int procuraJogador(int codCartao) {
   return -1;
 }
 
-//GRAVANDO NA EEPROM
-void salvaNaEEPROM() {
-  for (int i = 0; i < qtdDeJogadores; i++) {
-    int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
-    EEPROM.put(endereco, players[i]);
-  }
-  MEMORIA_ATUALIZADA = true;
-}
+void menuDeInicio() {
+  exibeLcd(0, 0, "Novo jogo?");
+  lcd.setCursor(0, 1);
+  lcd.print("1-Sim 2-Nao #/*");
 
-//LER EEPROM
-void lendoEPRROM() {
-  if (MEMORIA_ATUALIZADA) {
-    for (int i = 0; i < qtdDeJogadores; i++) {
-      int endereco = EEPROM_endereco + i * sizeof(contaJogadores);
-      EEPROM.get(endereco, players[i]);
-      int id = players[i].id;
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
+
+  if (tecla == '1') {
+    resetarEstadoNovoJogo();
+    exibirMensagemTemporaria("Vamos jogar...", TEMPO_TELA_MS, MENU_QTD_JOGADORES);
+  } else if (tecla == '2') {
+    if (carregarDaEEPROM() && qtdDeJogadores >= 2) {
+      exibirMensagemTemporaria("Continuando...", TEMPO_TELA_MS, MENU_LISTA_JOGADORES);
+      indiceListaJogadores = 0;
+    } else {
+      exibirMensagemTemporaria("Sem jogos salvos", TEMPO_TELA_MS, MENU_INICIO);
     }
-    MEMORIA_ATUALIZADA = false;
+  } else if (tecla == '#') {
+    limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+    menuOp = MENU_CONFIG_DINHEIRO;
+  } else if (tecla == '*') {
+    limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+    menuOp = MENU_CONFIG_SALARIO;
+  } else if (tecla == 'D') {
+    menuOp = MENU_RESET_CONFIRM;
+    lcd.clear();
+    lcd.print("Apagar dados?");
+    lcd.setCursor(0, 1);
+    lcd.print("#-Sim  D-Nao");
   }
-  salvaNaEEPROM();
 }
 
-//IMPRIME LISTA DE JOGADORES
-void printListaJogadores() {
-  lendoEPRROM();
-  delay(50);
+void menuResetConfirm() {
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
+
+  if (tecla == '#') {
+    apagarEEPROM();
+    resetarEstadoNovoJogo();
+    exibirMensagemTemporaria("Dados apagados", TEMPO_TELA_MS, MENU_INICIO);
+  } else if (tecla == 'D') {
+    menuOp = MENU_INICIO;
+    lcd.clear();
+  }
+}
+
+void menuConfigDinheiro() {
+  lcd.setCursor(0, 0);
+  lcd.print("Dinheiro inicio:");
+  lcd.setCursor(0, 1);
+  lcd.print(valorTela);
+  lcd.print(" + confirma");
+
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
+
+  if (tecla >= '0' && tecla <= '9') {
+    if (tamanhoString(valorTela) < MAX_DIGITOS_VALOR) {
+      adicionarDigito(valorTela, MAX_DIGITOS_VALOR + 1, tecla);
+    }
+  } else if (tecla == 'D') {
+    removerUltimoDigito(valorTela);
+  } else if (tecla == '+') {
+    long valor = stringParaLong(valorTela);
+    if (valor > 0) {
+      dinheiroInicial = valor;
+    }
+    exibirMensagemTemporaria("Salvo!", TEMPO_TELA_MS, MENU_INICIO);
+    limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+  } else if (tecla == 'C') {
+    limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+    menuOp = MENU_INICIO;
+  }
+}
+
+void menuConfigSalario() {
+  lcd.setCursor(0, 0);
+  lcd.print("Salario inicio:");
+  lcd.setCursor(0, 1);
+  lcd.print(valorTela);
+  lcd.print(" + confirma");
+
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
+
+  if (tecla >= '0' && tecla <= '9') {
+    if (tamanhoString(valorTela) < MAX_DIGITOS_VALOR) {
+      adicionarDigito(valorTela, MAX_DIGITOS_VALOR + 1, tecla);
+    }
+  } else if (tecla == 'D') {
+    removerUltimoDigito(valorTela);
+  } else if (tecla == '+') {
+    long valor = stringParaLong(valorTela);
+    if (valor > 0) {
+      salarioPassagem = valor;
+    }
+    exibirMensagemTemporaria("Salvo!", TEMPO_TELA_MS, MENU_INICIO);
+    limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+  } else if (tecla == 'C') {
+    limparBuffer(valorTela, MAX_DIGITOS_VALOR + 1);
+    menuOp = MENU_INICIO;
+  }
+}
+
+void menuQtdJogadores() {
+  lcd.setCursor(0, 0);
+  lcd.print("Qtd jogadores");
+  lcd.setCursor(0, 1);
+  lcd.print("de 2 a ");
+  lcd.print(QTD_MAXIMA_JOGADORES);
+
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
+
+  if (tecla >= '2' && tecla <= ('0' + QTD_MAXIMA_JOGADORES)) {
+    qtdDeJogadores = tecla - '0';
+    indiceCadastroCartao = 0;
+    menuOp = MENU_ESPERANDO_CARTAO;
+    lcd.clear();
+  } else if (tecla >= '0' && tecla <= '9') {
+    exibirMensagemTemporaria("Use 2 a 6", TEMPO_TELA_MS, MENU_QTD_JOGADORES);
+  }
+}
+
+void menuEsperandoCartao() {
+  if (indiceCadastroCartao >= qtdDeJogadores) {
+    salvarNaEEPROM();
+    indiceListaJogadores = 0;
+    menuOp = MENU_LISTA_JOGADORES;
+    return;
+  }
+
+  if (aguardandoExibicaoCadastro) {
+    if (timerMensagem.expirou()) {
+      aguardandoExibicaoCadastro = false;
+      indiceCadastroCartao++;
+      limparBuffer(textoEmTela, 17);
+    }
+    return;
+  }
+
+  int cartaoCod = aproximaCartao();
+  if (cartaoCod == -1) return;
+
+  if (procuraJogador(cartaoCod) != -1) {
+    exibirMensagemTemporaria("Cartao ja usado", TEMPO_TELA_MS, MENU_ESPERANDO_CARTAO);
+    return;
+  }
+
+  players[indiceCadastroCartao].id = cartaoCod;
+  players[indiceCadastroCartao].saldo = dinheiroInicial;
+
   lcd.clear();
+  lcd.print(cartoes[cartaoCod].nomeFantasia);
+  lcd.setCursor(0, 1);
+  lcd.print("R$ ");
+  lcd.print(players[indiceCadastroCartao].saldo);
 
-  for (int i = 0; i < qtdDeJogadores; i++) {
+  timerMensagem.iniciar(TEMPO_TELA_MS);
+  aguardandoExibicaoCadastro = true;
+}
 
+void menuListaJogadores() {
+  if (indiceListaJogadores >= qtdDeJogadores) {
+    lcd.clear();
+    menuOp = MENU_CALCULADORA;
+    return;
+  }
+
+  if (!timerMensagem.estaAtivo()) {
+    lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print(String(i + 1));
-    lcd.setCursor(2, 0);
+    lcd.print(indiceListaJogadores + 1);
     lcd.print("->");
-    lcd.setCursor(5, 0);
-    lcd.print(nomeCartao[players[i].id].nomeFantasia);
+    lcd.print(cartoes[players[indiceListaJogadores].id].nomeFantasia);
     lcd.setCursor(0, 1);
     lcd.print("R$ ");
-    lcd.setCursor(3, 1);
-    lcd.print(String(players[i].saldoConta));
-    delay(tempoDeTela);
-    lcd.clear();
+    lcd.print(players[indiceListaJogadores].saldo);
+    timerMensagem.iniciar(TEMPO_TELA_MS);
   }
-  lcd.clear();
+
+  if (timerMensagem.expirou()) {
+    timerMensagem.parar();
+    indiceListaJogadores++;
+  }
 }
 
-//Dados para gravados para poder desfazer a ultima operação
-struct opRealizada {
-  String operador;
-  int posJog1;
-  int posJog2;
-  long valorTransferido;
-};
-opRealizada dadosDesfazer = { "", -1, -1, 0 };
+void menuCalculadora() {
+  lcd.setCursor(0, 0);
+  lcd.print("Valor: * lista");
+  lcd.setCursor(0, 1);
+  lcd.print(valorTela);
 
-//CALCULADORA
-//Função responsavel por receber os valores e definir as operaçoes da maquina via teclado
-void calculadora() {
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
 
-  // receiver.resume();
-  //leituraDoTeclado.enabled = true;
-
-  char key = keypad.getKey();
-
-  //ERRO AQUI NAO QUER VALIDAR A TECLA
-  if (key >= '0' && key <= '9') {
-
-    valorTela += key;
-    lcd.setCursor(0, 1);
-    lcd.print(valorTela);
-    value2 = valorTela.toInt();
-    key = "";
-  } else if (key == '+' && value2 != 0) {
-    exibeLcd(0, 0, "Aproxime cartao ");
-    menuOp = 4;
-    valorTela = "";
-    key = "";
-
-  } else if (key == '-' && value2 != 0) {
-    exibeLcd(0, 0, "Aproxime cartao ");
-    menuOp = 5;
-    key = "";
-    valorTela = "";
-
-
-
-  } else if (key == '*') {
-    // Define a operação Imprimir todos os jogadores e o saldo
-    valorTela = "";
-    key = "";
-    printListaJogadores();
-    value2 = 0;
-    menuOp = 3;
-
-  } else if (key == 'C' && value2 != 0) {
-    //Operação de transferir
-    exibeLcd(0, 0, "Aproxime cartao ");
-    menuOp = 6;
-    valorTela = "";
-    key = "";
-
-  } else if (key == 'D' && !valorTela.equals("")) {
-    // Define a operação apagar um digito da tela
-    key = "";
-    lcd.setCursor(valorTela.length() - 1, 1);
-    lcd.print(" ");
-    valorTela = valorTela.substring(0, valorTela.length() - 1);
-    // dadosDesfazer = { "", -1, -1, 0 };
-
-    value2 = valorTela.toInt();
-
-  } else if (key == 'D' && valorTela.equals("")) {
-    // Define a operação desfazer a ultima operação caso não tenha digitos na tela
-    valorTela = "";
-    key = "";
-    value2 = 0;
-
-    if (!dadosDesfazer.operador.equals("")) {
+  if (tecla >= '0' && tecla <= '9') {
+    if (tamanhoString(valorTela) < MAX_DIGITOS_VALOR) {
+      adicionarDigito(valorTela, MAX_DIGITOS_VALOR + 1, tecla);
+      valorTransacao = stringParaLong(valorTela);
+    }
+  } else if (tecla == 'D') {
+    if (tamanhoString(valorTela) > 0) {
+      removerUltimoDigito(valorTela);
+      valorTransacao = stringParaLong(valorTela);
+    } else if (dadosDesfazer.operador != '\0') {
       operacaoDesfazer();
+      menuOp = MENU_CALCULADORA;
     }
-
-  } else if (valorTela.length() > 8) {
-
-    lcd.setCursor(0, 0);
-    lcd.print("maximo   ");
-    lcd.setCursor(valorTela.length() - 1, 1);
-    lcd.print(" ");
-    valorTela = valorTela.substring(0, valorTela.length() - 1);
-    delay(tempoDeTela);
-    lcd.setCursor(0, 0);
-    lcd.print("Digite o valor:");
-
-  } else if (value2 == 0) {
-
-    lcd.setCursor(0, 0);
-    lcd.print("Digite o valor:");
+  } else if (tecla == '+' && valorTransacao > 0) {
+    operacaoPendente = OP_ADICIONAR;
+    menuOp = MENU_CONFIRMACAO;
+  } else if (tecla == '-' && valorTransacao > 0) {
+    operacaoPendente = OP_RETIRAR;
+    menuOp = MENU_CONFIRMACAO;
+  } else if (tecla == 'C' && valorTransacao > 0) {
+    operacaoPendente = OP_TRANSFERIR;
+    menuOp = MENU_CONFIRMACAO;
+  } else if (tecla == '*') {
+    indiceListaJogadores = 0;
+    menuOp = MENU_LISTA_JOGADORES;
+  } else if (tecla == '#' && valorTransacao == 0) {
+    operacaoPendente = OP_SALARIO;
+    valorTransacao = salarioPassagem;
+    menuOp = MENU_SALARIO;
   }
 }
 
-//OPERAÇÃO DE ADICIONAR DINHEIRO A CONTA
-void operacaoAdicionar() {
-
-  int cartao = aproximaCartao();
-  int posicaoJogador = procuraJogador(cartao);
-
-  if (cartao != -1 && posicaoJogador != -1) {
-
-    players[posicaoJogador].saldoConta += value2;
-    dadosDesfazer = { "+", posicaoJogador, -1, value2 };
-    value2 = 0;
-    mostraNovoSaldo(posicaoJogador);
-    menuOp = 3;
+void menuConfirmacao() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  if (operacaoPendente == OP_ADICIONAR) {
+    lcd.print("Adicionar R$");
+  } else if (operacaoPendente == OP_RETIRAR) {
+    lcd.print("Retirar R$");
+  } else if (operacaoPendente == OP_TRANSFERIR) {
+    lcd.print("Transferir R$");
   }
-}
-
-//OPERAÇÃO DE RETIRAR DINHEIRO A CONTA
-void operacaoRetirar() {
-
-  int cartao = aproximaCartao();
-
-  int posicaoJogador = procuraJogador(cartao);
-
-  if (cartao != -1 && posicaoJogador != -1) {
-
-    if (players[posicaoJogador].saldoConta >= value2) {
-
-      players[posicaoJogador].saldoConta -= value2;
-      mostraNovoSaldo(posicaoJogador);
-
-      dadosDesfazer = { "-", posicaoJogador, -1, value2 };
-      value2 = 0;
-      menuOp = 3;
-
-    } else {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Saldo insuficiente");
-      value2 = 0;
-      delay(tempoDeTela);
-      mostraNovoSaldo(posicaoJogador);
-      menuOp = 3;
-    }
-  }
-}
-
-int jogadorCont = 0;
-
-void operacaoTransferir() {
-
-  int cartao = aproximaCartao();
-
   lcd.setCursor(0, 1);
-  lcd.print(String(jogadorCont + 1) + "o Jogador");
+  lcd.print(valorTransacao);
+  lcd.print(" # ok D canc");
 
-  int posicaoJogador = procuraJogador(cartao);
+  char tecla = keypad.getKey();
+  if (tecla == NO_KEY) return;
+  atualizarAtividade();
 
-  if (cartao != -1 && posicaoJogador != -1) {
-
-    if (jogadorCont == 0) {
-
-      if (players[posicaoJogador].saldoConta >= value2) {
-        players[posicaoJogador].saldoConta -= value2;
-        jogadorCont++;
-
-        dadosDesfazer.posJog1 = posicaoJogador;
-        operacaoTransferir();
-      } else {
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("Saldo insuficiente");
-        value2 = 0;
-        delay(tempoDeTela);
-        mostraNovoSaldo(posicaoJogador);
-        menuOp = 3;
-      }
-    } else if (jogadorCont == 1 && dadosDesfazer.posJog1 != posicaoJogador) {
-
-      players[posicaoJogador].saldoConta += value2;
-      mostraNovoSaldo(posicaoJogador);
-      dadosDesfazer.posJog2 = posicaoJogador;
-      dadosDesfazer.operador = "T";
-      dadosDesfazer.valorTransferido = value2;
-
-      value2 = 0;
-      jogadorCont = 0;
-      menuOp = 3;
+  if (tecla == '#') {
+    if (operacaoPendente == OP_ADICIONAR) {
+      menuOp = MENU_ADICIONAR;
+    } else if (operacaoPendente == OP_RETIRAR) {
+      menuOp = MENU_RETIRAR;
+    } else if (operacaoPendente == OP_TRANSFERIR) {
+      transferenciaOrigem = -1;
+      menuOp = MENU_TRANSFERIR_ORIGEM;
     }
-  }
-}
-//desfaz a ultima ação
-void operacaoDesfazer() {
-
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Desfazendo");
-  delay(tempoDeTela);
-
-  int posicaoJogador = dadosDesfazer.posJog1;
-
-  if (dadosDesfazer.operador.equals("+")) {
-    players[posicaoJogador].saldoConta -= dadosDesfazer.valorTransferido;
-    mostraNovoSaldo(posicaoJogador);
-    dadosDesfazer = { "", -1, -1, 0 };
-
-  } else if (dadosDesfazer.operador.equals("-")) {
-    players[posicaoJogador].saldoConta += dadosDesfazer.valorTransferido;
-    mostraNovoSaldo(posicaoJogador);
-    dadosDesfazer = { "", -1, -1, 0 };
-
-  } else if (dadosDesfazer.operador.equals("T")) {
-
-    players[dadosDesfazer.posJog1].saldoConta += dadosDesfazer.valorTransferido;
-    players[dadosDesfazer.posJog2].saldoConta -= dadosDesfazer.valorTransferido;
-    mostraNovoSaldo(dadosDesfazer.posJog1);
-    dadosDesfazer = { "", -1, -1, 0 };
-  }
-}
-
-//EXIBE NO LCD O NOVO SALDO E SALVA NA EEPROM O NOVO SALDO
-void mostraNovoSaldo(int posicaoJogador) {
-  salvaNaEEPROM();
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(nomeCartao[players[posicaoJogador].id].nomeFantasia);
-  lcd.setCursor(0, 1);
-  lcd.print(String(players[posicaoJogador].saldoConta));
-  delay(tempoDeTela);
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Concluido");
-  delay(tempoDeTela);
-  lcd.clear();
-}
-
-String textoEmTela = "";
-
-//EXIBE UMA MENSAGEM NO LCD COM PARAMENTROS INFORMADOS
-void exibeLcd(int colunaLCD, int linhaLCD, String texto) {
-  if (!textoEmTela.equals(texto)) {
+    limparBuffer(textoEmTela, 17);
+  } else if (tecla == 'D' || tecla == 'C') {
+    limparOperacaoPendente();
+    menuOp = MENU_CALCULADORA;
     lcd.clear();
-    lcd.setCursor(colunaLCD, linhaLCD);
-    lcd.print(texto);
-    textoEmTela = texto;
   }
 }
 
-void telaDeCarregamento(){
-    lcd.home();
+void menuAdicionar() {
+  int cartao = aproximaCartao();
+  if (cartao == -1) return;
 
-  for (int i = 0 ; i < 2; i++) {
-    lcd.setCursor(0, i);
-    for (int j = 0 ; j < 16; j++) {
-      lcd.write(0);
-      delay(50);
-    }
-  } 
-
-   lcd.rightToLeft();
-  for (int i = 1 ; i >=0; i--) {
-
-    for (int j = 0; j <=16; j++) {
-      lcd.print(' ');
-      delay(20);
-    }
-    lcd.setCursor(16, 0);
+  int pos = procuraJogador(cartao);
+  if (pos == -1) {
+    mostrarErroCartao();
+    return;
   }
- 
 
+  players[pos].saldo += valorTransacao;
+  registrarOperacaoDesfazer('+', pos, -1, valorTransacao);
+  registrarHistorico('+', pos, -1, valorTransacao);
+  mostraNovoSaldo(pos);
+  limparOperacaoPendente();
+}
 
-lcd.clear();
+void menuRetirar() {
+  int cartao = aproximaCartao();
+  if (cartao == -1) return;
+
+  int pos = procuraJogador(cartao);
+  if (pos == -1) {
+    mostrarErroCartao();
+    return;
+  }
+
+  if (players[pos].saldo < valorTransacao) {
+    exibirMensagemTemporaria("Saldo insufic.", TEMPO_TELA_MS, MENU_CALCULADORA);
+    limparOperacaoPendente();
+    return;
+  }
+
+  players[pos].saldo -= valorTransacao;
+  registrarOperacaoDesfazer('-', pos, -1, valorTransacao);
+  registrarHistorico('-', pos, -1, valorTransacao);
+  mostraNovoSaldo(pos);
+  limparOperacaoPendente();
+}
+
+void menuTransferirOrigem() {
+  exibeLcd(0, 0, "Cartao origem");
+  lcd.setCursor(0, 1);
+  lcd.print("1o jogador");
+
+  int cartao = aproximaCartao();
+  if (cartao == -1) return;
+
+  int pos = procuraJogador(cartao);
+  if (pos == -1) {
+    mostrarErroCartao();
+    limparOperacaoPendente();
+    return;
+  }
+
+  if (players[pos].saldo < valorTransacao) {
+    exibirMensagemTemporaria("Saldo insufic.", TEMPO_TELA_MS, MENU_CALCULADORA);
+    limparOperacaoPendente();
+    return;
+  }
+
+  transferenciaOrigem = pos;
+  menuOp = MENU_TRANSFERIR_DESTINO;
+  limparBuffer(textoEmTela, 17);
+}
+
+void menuTransferirDestino() {
+  exibeLcd(0, 0, "Cartao destino");
+  lcd.setCursor(0, 1);
+  lcd.print("2o jogador");
+
+  int cartao = aproximaCartao();
+  if (cartao == -1) return;
+
+  int pos = procuraJogador(cartao);
+  if (pos == -1) {
+    mostrarErroCartao();
+    return;
+  }
+
+  if (pos == transferenciaOrigem) {
+    exibirMensagemTemporaria("Mesmo jogador!", TEMPO_TELA_MS, MENU_TRANSFERIR_DESTINO);
+    return;
+  }
+
+  players[transferenciaOrigem].saldo -= valorTransacao;
+  players[pos].saldo += valorTransacao;
+
+  registrarOperacaoDesfazer('T', transferenciaOrigem, pos, valorTransacao);
+  registrarHistorico('T', transferenciaOrigem, pos, valorTransacao);
+
+  mostraNovoSaldo(pos);
+  transferenciaOrigem = -1;
+  limparOperacaoPendente();
+}
+
+void menuSalario() {
+  exibeLcd(0, 0, "Salario inicio");
+  lcd.setCursor(0, 1);
+  lcd.print("R$ ");
+  lcd.print(valorTransacao);
+
+  int cartao = aproximaCartao();
+  if (cartao == -1) return;
+
+  int pos = procuraJogador(cartao);
+  if (pos == -1) {
+    mostrarErroCartao();
+    limparOperacaoPendente();
+    return;
+  }
+
+  players[pos].saldo += valorTransacao;
+  registrarOperacaoDesfazer('S', pos, -1, valorTransacao);
+  registrarHistorico('S', pos, -1, valorTransacao);
+  mostraNovoSaldo(pos);
+  limparOperacaoPendente();
+}
+
+void operacaoDesfazer() {
+  if (dadosDesfazer.operador == '+') {
+    players[dadosDesfazer.posJog1].saldo -= dadosDesfazer.valor;
+  } else if (dadosDesfazer.operador == '-') {
+    players[dadosDesfazer.posJog1].saldo += dadosDesfazer.valor;
+  } else if (dadosDesfazer.operador == 'T') {
+    players[dadosDesfazer.posJog1].saldo += dadosDesfazer.valor;
+    players[dadosDesfazer.posJog2].saldo -= dadosDesfazer.valor;
+  } else if (dadosDesfazer.operador == 'S') {
+    players[dadosDesfazer.posJog1].saldo -= dadosDesfazer.valor;
+  }
+
+  salvarNaEEPROM();
+  dadosDesfazer.operador = '\0';
+  dadosDesfazer.posJog1 = -1;
+  dadosDesfazer.posJog2 = -1;
+  dadosDesfazer.valor = 0;
+
+  exibirMensagemTemporaria("Desfeito!", TEMPO_TELA_MS, MENU_CALCULADORA);
+}
+
+void mostraNovoSaldo(int posicaoJogador) {
+  salvarNaEEPROM();
+  lcd.clear();
+  lcd.print(cartoes[players[posicaoJogador].id].nomeFantasia);
+  lcd.setCursor(0, 1);
+  lcd.print("R$ ");
+  lcd.print(players[posicaoJogador].saldo);
+  timerMensagem.iniciar(TEMPO_TELA_MS);
+  menuRetornoMsg = MENU_CALCULADORA;
+  menuOp = MENU_MSG_TEMPORARIA;
+}
+
+void telaDeCarregamento() {
+  lcd.home();
+  for (int i = 0; i < 2; i++) {
+    lcd.setCursor(0, i);
+    for (int j = 0; j < 16; j++) {
+      lcd.write(0);
+      delay(30);
+    }
+  }
+
+  lcd.leftToRight();
+  lcd.clear();
 }
